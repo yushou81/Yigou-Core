@@ -1,12 +1,18 @@
 <!--suppress HtmlDeprecatedAttribute -->
 
-<p align="center"> <img src="https://www.google.com/search?q=https://placehold.co/150x150/7F56D9/FFFFFF%3Ftext%3D🦦" alt="易构吉祥物-海獭"> </p>
+<p align="center"> 
+    <img src="https://www.google.com/search?q=https://placehold.co/150x150/7F56D9/FFFFFF%3Ftext%3D🦦" alt="易构吉祥物-海獭"> </p>
 
 <h1 align="center">易构 (Yì Gòu)</h1>
 
 <p align="center"> 一款为开发者而生的、极致易用的开源架构设计工具。 </p>
 
-<p align="center"> <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a> <a href="https://www.google.com/search?q=./LICENSE"><img src="https://www.google.com/search?q=https://img.shields.io/badge/license-MIT-blue" alt="License"></a> <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/github/stars/your-username/yigou%3Fstyle%3Dsocial" alt="GitHub Stars"></a> <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/github/forks/your-username/yigou%3Fstyle%3Dsocial" alt="GitHub Forks"></a> </p>
+<p align="center"> 
+    <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a> 
+    <a href="https://www.google.com/search?q=./LICENSE"><img src="https://www.google.com/search?q=https://img.shields.io/badge/license-MIT-blue" alt="License"></a> 
+    <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/github/stars/your-username/yigou%3Fstyle%3Dsocial" alt="GitHub Stars"></a> 
+    <a href="#"><img src="https://www.google.com/search?q=https://img.shields.io/github/forks/your-username/yigou%3Fstyle%3Dsocial" alt="GitHub Forks"></a> 
+</p>
 
 <p align="center"> 轻松构思，优雅成图。像海獭一样，用聪明的工具，轻松“破壳”复杂问题。 </p>
 
