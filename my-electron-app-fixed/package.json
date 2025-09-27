@@ -1,0 +1,16 @@
+{
+  "name": "my-electron-app",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "react-dev": "cd frontend && npm run dev",
+    "electron-dev": "cross-env NODE_ENV=development electron .",
+    "dev": "concurrently \"npm run react-dev\" \"npm run electron-dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "^28.0.0"
+  }
+}
