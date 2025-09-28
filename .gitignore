@@ -1,0 +1,52 @@
+# 依赖
+/node_modules
+/.pnp
+.pnp.js
+
+# 测试覆盖率报告 (Testing)
+/coverage
+
+# 生产环境构建输出 (Production builds)
+# 这些是通过 `npm run build` 命令生成的最终打包文件
+/dist
+/release
+/build
+
+# 开发环境构建输出 (Development builds)
+# 这是开发过程中 Vite 和 Electron 编译的中间文件
+/out
+/.vite
+
+# 其他杂项 (Misc)
+# macOS 系统文件
+.DS_Store
+# SSL 证书文件
+*.pem
+# 日志文件
+*.log
+# npm 调试日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 本地环境变量文件 (Local Env Files)
+# 这些文件可能包含密码等敏感信息，绝对不能上传
+.env.local
+.env.*.local
+
+# 编辑器和IDE的配置文件 (Editor directories and files)
+# 这是为了避免团队成员的个人编辑器配置互相冲突
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.npmrc
+
+.DS_Store
+.eslintcache
+*.log*
+
+.idea
