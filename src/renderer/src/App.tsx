@@ -1,4 +1,5 @@
 import Versions from './components/Versions'
+import Canvas from './components/Canvas'
 import electronLogo from './assets/electron.svg'
 
 function App(): React.JSX.Element {
@@ -6,6 +7,7 @@ function App(): React.JSX.Element {
 
   return (
     <>
+      <Canvas />
       <img alt="logo" className="logo" src={electronLogo} />
       <div className="creator">Powered by electron-vite</div>
       <div className="text">
