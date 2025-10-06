@@ -1,14 +1,26 @@
 import Versions from './components/Versions'
 import Canvas from './components/Canvas'
-import electronLogo from './assets/electron.svg'
+//import electronLogo from './assets/electron.svg'
+//  <img alt="logo" className="logo" src={electronLogo} />
+import React from 'react';
+import { RouterProvider } from 'react-router-dom'
+import router from '@renderer/router/router'
+
+//import { RouterProvider } from 'react-router-dom';
+//import router from '../src/router/router';
 
 function App(): React.JSX.Element {
   const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
 
   return (
+
+
     <>
-      <Canvas />
-      <img alt="logo" className="logo" src={electronLogo} />
+      <div className="App">
+        <RouterProvider router={router} />
+      </div>
+      <Canvas/>
+
       <div className="creator">Powered by electron-vite</div>
       <div className="text">
         Build an Electron app with <span className="react">React</span>
@@ -30,8 +42,10 @@ function App(): React.JSX.Element {
         </div>
       </div>
       <Versions></Versions>
+
     </>
   )
 }
+
 
 export default App
