@@ -62,9 +62,40 @@ const GridBackground: React.FC<GridBackgroundProps> = React.memo(function GridBa
   return <Group listening={false}>{dots}</Group>
 })
 
+declare global {
+  interface Window {
+    api: {
+      saveData: (data: { shapes: ShapeData[], camera: CameraState }) => Promise<{ success: boolean, error?: string }>;
+      loadData: () => Promise<{ shapes: ShapeData[], camera: CameraState } | null>;
+    }
+  }
+}
+
+
+// --- 防抖 (Debounce) 自訂 Hook ---
+// 這是一個效能優化技巧。如果沒有它，每次滑鼠移動或縮放都會觸發一次檔案寫入，
+// 這會造成大量的 I/O 操作，非常浪費效能。
+// 防抖的作用是：當狀態連續改變時，它會等待，直到停止改變後的一小段時間 (例如 500ms) 才執行一次儲存操作。
+function useDebouncedEffect(effect, deps, delay) {
+  const callback = useCallback(effect, deps);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      callback();
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [callback, delay]);
+}
+
+
 // --- 核心组件：Canvas ---
+// 怎么把该画布的坐标系弄出来，坐标系应该在刚进去没手动移动或缩放情况下的屏幕左上角.
+// 下面的scale缩放数值是以原点为固定点缩放的（原点位置不变），偏移不是以原点为基准偏移（坐标系动，物体也跟着动，实际是原点位置动））
 const Canvas: React.FC = () => {
-  const [shapes, setShapes] = useState<ShapeData[]>(initialShapes)
+  const [shapes, setShapes] = useState<ShapeData[]|null>(null)
   const [cameraState, setCameraState] = useState<CameraState>({ scale: 1, x: 0, y: 0 })
   const [stageSize, setStageSize] = useState({
     width: window.innerWidth,
@@ -78,6 +109,43 @@ const Canvas: React.FC = () => {
   const [selectedShapeType, setSelectedShapeType] = useState<ShapeType | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawingShape, setDrawingShape] = useState<ShapeData | null>(null)
+
+//------------------------------------------------------------------------------------------------
+  useEffect(() => {
+    const loadDataFromFile = async () => {
+      // 呼叫我們在 preload.js 中定義的 API
+      const data = await window.api.loadData();
+
+      // 如果成功讀取到數據 (data 不是 null)
+      if (data && data.shapes && data.camera) {
+        // 如果檔案中有圖形數據，就用它來設定 state；如果沒有，則使用預設的 initialShapes。
+        setShapes(data.shapes.length > 0 ? data.shapes : initialShapes);
+        setCameraState(data.camera);
+      } else {
+        // 如果檔案不存在或內容為空，則使用預設的初始圖形數據。
+        setShapes(initialShapes);
+      }
+    };
+
+    loadDataFromFile();
+  }, []);
+
+  useDebouncedEffect(() => {
+      // 如果 shapes 還是 null (表示仍在載入中)，則不執行儲存。
+      if (shapes === null) {
+        return;
+      }
+
+      // 準備好要儲存的數據物件
+      const dataToSave = { shapes, camera: cameraState };
+      // 呼叫我們在 preload.js 中定義的 API 來儲存數據
+      window.api.saveData(dataToSave);
+      console.log(dataToSave)
+    },
+    [shapes, cameraState], // 依賴陣列：只有當 shapes 或 cameraState 改變時，這個 effect 才會重新觸發。
+    500 // 防抖延遲時間 (毫秒)，意味著在用戶停止操作 500ms 後才進行儲存。
+  );
+
 
   // Keyboard and window resize listeners
   useEffect(() => {
@@ -200,7 +268,7 @@ const Canvas: React.FC = () => {
       setSelectedShapeType(null)
     }
   }, [isDrawing, drawingShape])
-
+  //创建形状图形
   const handleStageClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       if (e.target !== e.target.getStage()) return
@@ -224,7 +292,7 @@ const Canvas: React.FC = () => {
     },
     [selectedShapeType, cameraState.x, cameraState.y, cameraState.scale]
   )
-
+  //滚轮缩放
   const handleWheel = useCallback(
     (e: KonvaEventObject<WheelEvent>) => {
       e.evt.preventDefault()
@@ -306,7 +374,9 @@ const Canvas: React.FC = () => {
     }
     return 'default'
   }
-
+  if (shapes === null) {
+    return <div>正在載入畫布...</div>;
+  }
   return (
     <div
       style={{

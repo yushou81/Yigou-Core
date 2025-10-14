@@ -3,6 +3,12 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
+
+
+import path from 'path'
+import fs from 'fs'
+let dataFilePath
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -34,6 +40,49 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, 'dist', '../renderer/index.html'))
   }
 }
+
+
+const userDataPath = app.getPath('userData');
+// eslint-disable-next-line prefer-const
+dataFilePath = path.join(userDataPath, 'canvas-data.json');
+console.log('數據將儲存至:', dataFilePath);
+ipcMain.handle('save-data', (_event, data) => {
+  try {
+    // 將從 React 組件傳來的 JavaScript 物件轉換為格式化的 JSON 字串。
+    const jsonString = JSON.stringify(data, null, 2); // null, 2 讓 JSON 格式更易讀
+    // 使用 Node.js 的 fs 模組，同步地將字串寫入我們之前定義好的檔案路徑。
+    fs.writeFileSync(dataFilePath, jsonString, 'utf-8');
+    // 操作成功，回傳一個成功的標記。
+    return { success: true };
+  } catch (error) {
+    // 如果寫入過程出錯，在主進程的終端機中印出錯誤，並回傳失敗訊息。
+    console.error('儲存數據失敗:', error);
+    return { error: true, success: false }
+  }
+});
+
+// 2. 處理 'load-data' 請求
+ipcMain.handle('load-data', async () => {
+  try {
+    console.log('load-data')
+    // 檢查檔案是否存在。
+    if (fs.existsSync(dataFilePath)) {
+      // 如果存在，則同步讀取檔案內容 (會是一個 JSON 字串)。
+      const jsonString = fs.readFileSync(dataFilePath, 'utf-8');
+      // 將讀取到的 JSON 字串解析成 JavaScript 物件並回傳給渲染進程。
+      return JSON.parse(jsonString);
+    }
+    // 如果檔案不存在 (例如第一次開啟應用)，回傳 null。
+    // 這樣前端就可以根據 null 來決定是否使用初始數據。
+    return null;
+  } catch (error) {
+    // 如果讀取或解析過程中出錯，印出錯誤並回傳 null。
+    console.error('讀取數據失敗:', error);
+    return null;
+  }
+});
+
+
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
