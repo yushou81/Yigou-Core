@@ -109,6 +109,8 @@ const Canvas: React.FC = () => {
   const [selectedShapeType, setSelectedShapeType] = useState<ShapeType | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawingShape, setDrawingShape] = useState<ShapeData | null>(null)
+  // 'idle' (閒置), 'saving' (儲存中), 'saved' (已儲存)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
 //------------------------------------------------------------------------------------------------
   useEffect(() => {
@@ -142,9 +144,57 @@ const Canvas: React.FC = () => {
       window.api.saveData(dataToSave);
       console.log(dataToSave)
     },
-    [shapes, cameraState], // 依賴陣列：只有當 shapes 或 cameraState 改變時，這個 effect 才會重新觸發。
+    [], // 依賴陣列：只有當 shapes 或 cameraState 改變時，這個 effect 才會重新觸發。
     500 // 防抖延遲時間 (毫秒)，意味著在用戶停止操作 500ms 後才進行儲存。
   );
+
+// 使用 useCallback 來確保這個函式在 shapes 和 cameraState 不變時保持穩定
+  const handleManualSave = useCallback(async() => {
+    // 如果 shapes 還沒載入完成，或正在儲存中，則不執行
+    if (shapes === null || saveStatus === 'saving') {
+      return;
+    }
+
+    setSaveStatus('saving'); // 顯示儲存中 (可選)
+    console.log('手動儲存觸發...');
+
+    const dataToSave = { shapes, camera: cameraState };
+    const result = await window.api.saveData(dataToSave);
+
+    if (result.success) {
+      console.log('手動儲存成功！');
+      setSaveStatus('saved');
+      // 顯示 "已儲存" 訊息 1.5 秒後自動消失
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 1500);
+    } else {
+      console.error('手動儲存失敗:', result.error);
+      setSaveStatus('idle'); // 如果失敗，恢復閒置狀態
+    }
+  }, [shapes, cameraState, saveStatus]); // 依賴項包含 shapes 和 cameraState，確保函式能取到最新的狀態
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // 檢查是否按下了 Ctrl+S (Windows/Linux) 或 Cmd+S (macOS)
+      // event.metaKey 對應 macOS 上的 Command 鍵
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        // **非常重要**: 防止瀏覽器執行預設的 "儲存網頁" 操作
+        event.preventDefault();
+
+        // 呼叫我們的手動儲存函式
+        handleManualSave();
+      }
+    };
+
+    // 在 window 上新增事件監聽器
+    window.addEventListener('keydown', handleKeyDown);
+
+    // **關鍵**: 組件卸載時，務必移除監聽器，防止記憶體洩漏
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleManualSave]); // 依賴 handleManualSave，確保它能被正確更新
 
 
   // Keyboard and window resize listeners
@@ -384,10 +434,31 @@ const Canvas: React.FC = () => {
         height: '100vh',
         overflow: 'hidden',
         cursor: getCursorStyle(),
-        backgroundColor: 'white'
+        backgroundColor: 'white',
+        position: 'relative' // 為了定位提示訊息，新增 position
       }}
     >
       <Toolbar selectedShape={selectedShapeType} onSelectShape={setSelectedShapeType} />
+
+      {/* --- 新增 4: 在畫面上顯示儲存狀態 --- */}
+      {saveStatus === 'saved' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '5px',
+            zIndex: 100,
+            pointerEvents: 'none' // 讓滑鼠可以穿透這個元素
+          }}
+        >
+          已儲存！
+        </div>
+      )}
 
       <Stage
         width={stageSize.width}
