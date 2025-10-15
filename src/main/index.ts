@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain,dialog} from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -7,8 +7,42 @@ import icon from '../../resources/icon.png?asset'
 
 import path from 'path'
 import fs from 'fs'
-let dataFilePath
+//保存加载方面逻辑-----------------------------------------------------------------------------------------
+// --- 變數定義 ---
+// 將檔案路徑相關的變數移到頂部，方便管理
+let settingsFilePath: string;//固定值，该路径的文件是用来存储上次关闭应用时所打开的文件的位置
+let defaultDataFilePath: string;//第一次打开或者没有保存文件时的默认路径文件
+let currentDataFilePath: string; // 用來追蹤當前正在操作的檔案路徑
 
+
+
+// Settings 介面定義
+interface AppSettings {
+  lastOpenedFilePath?: string;
+}
+
+// 讀取設定的輔助函式
+function loadSettings(): AppSettings {
+  try {
+    if (fs.existsSync(settingsFilePath)) {
+      const settingsJson = fs.readFileSync(settingsFilePath, 'utf-8');
+      return JSON.parse(settingsJson);
+    }
+  } catch (error) {
+    console.error('讀取設定檔失敗:', error);
+  }
+  return {}; // 如果檔案不存在或出錯，回傳空物件
+}
+/*
+// 儲存設定的輔助函式//以后有打开功能用得到
+function saveSettings(settings: AppSettings) {
+  try {
+    fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2));
+  } catch (error) {
+    console.error('儲存設定檔失敗:', error);
+  }
+}
+*/
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -22,6 +56,7 @@ function createWindow(): void {
       sandbox: false
     }
   })
+//保存加载方面逻辑-----------------------------------------------------------------------------------------
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -42,45 +77,7 @@ function createWindow(): void {
 }
 
 
-const userDataPath = app.getPath('userData');
-// eslint-disable-next-line prefer-const
-dataFilePath = path.join(userDataPath, 'canvas-data.json');
-console.log('數據將儲存至:', dataFilePath);
-ipcMain.handle('save-data', (_event, data) => {
-  try {
-    // 將從 React 組件傳來的 JavaScript 物件轉換為格式化的 JSON 字串。
-    const jsonString = JSON.stringify(data, null, 2); // null, 2 讓 JSON 格式更易讀
-    // 使用 Node.js 的 fs 模組，同步地將字串寫入我們之前定義好的檔案路徑。
-    fs.writeFileSync(dataFilePath, jsonString, 'utf-8');
-    // 操作成功，回傳一個成功的標記。
-    return { success: true };
-  } catch (error) {
-    // 如果寫入過程出錯，在主進程的終端機中印出錯誤，並回傳失敗訊息。
-    console.error('儲存數據失敗:', error);
-    return { error: true, success: false }
-  }
-});
 
-// 2. 處理 'load-data' 請求
-ipcMain.handle('load-data', async () => {
-  try {
-    console.log('load-data')
-    // 檢查檔案是否存在。
-    if (fs.existsSync(dataFilePath)) {
-      // 如果存在，則同步讀取檔案內容 (會是一個 JSON 字串)。
-      const jsonString = fs.readFileSync(dataFilePath, 'utf-8');
-      // 將讀取到的 JSON 字串解析成 JavaScript 物件並回傳給渲染進程。
-      return JSON.parse(jsonString);
-    }
-    // 如果檔案不存在 (例如第一次開啟應用)，回傳 null。
-    // 這樣前端就可以根據 null 來決定是否使用初始數據。
-    return null;
-  } catch (error) {
-    // 如果讀取或解析過程中出錯，印出錯誤並回傳 null。
-    console.error('讀取數據失敗:', error);
-    return null;
-  }
-});
 
 
 
@@ -90,7 +87,86 @@ ipcMain.handle('load-data', async () => {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+//保存加载方面逻辑-----------------------------------------------------------------------------------------
+// --- 關鍵修改 1: 初始化所有路徑 ---
+  const userDataPath = app.getPath('userData');
+// 設定檔的路徑
+  settingsFilePath = path.join(userDataPath, 'settings.json');
+// 預設畫布數據檔案的路徑
+  defaultDataFilePath = path.join(userDataPath, 'canvas-data.json');
+// 決定本次啟動要載入哪個檔案
+  const settings = loadSettings();
+// 如果設定檔中有上次的路徑，就用它；否則，使用預設路徑
+  currentDataFilePath = settings.lastOpenedFilePath || defaultDataFilePath;
 
+  console.log('初始路径', currentDataFilePath);
+
+//ctrl+s保存api
+  ipcMain.handle('save-data', (_event, data) => {
+    try {
+      // 總是儲存到當前追蹤的路徑
+      const jsonString = JSON.stringify(data, null, 2);
+      fs.writeFileSync(currentDataFilePath, jsonString, 'utf-8');
+      return { success: true };
+    } catch (error) {
+      console.error(`儲存數據至 ${currentDataFilePath} 失敗:`, error);
+      return { success: false, error: true };
+    }
+  });
+//加载数据api
+  ipcMain.handle('load-data', async () => {
+    try {
+      // 直接從當前追蹤的路徑讀取
+      if (fs.existsSync(currentDataFilePath)) {
+        const jsonString = fs.readFileSync(currentDataFilePath, 'utf-8');
+        return JSON.parse(jsonString);
+      }
+      return null;
+    } catch (error) {
+      console.error(`從 ${currentDataFilePath} 讀取數據失敗:`, error);
+      return null;
+    }
+  });
+//另存为api
+  ipcMain.handle('save-data-as', async (_event, data) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: '無法獲取主視窗' };
+
+    try {
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: '將畫布另存為',
+        defaultPath: path.basename(currentDataFilePath) || '我的畫布.json', // 預設檔名使用目前檔名
+        filters: [
+          { name: 'JSON 檔案', extensions: ['json'] },
+          { name: '所有檔案', extensions: ['*'] }
+        ]
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true };
+      }
+
+      const newFilePath = result.filePath;
+      const jsonString = JSON.stringify(data, null, 2);
+      fs.writeFileSync(newFilePath, jsonString, 'utf-8');
+
+      // --- 關鍵修改 3: 成功另存為後，更新當前路徑並儲存設定 ---
+      /*
+      currentDataFilePath = newFilePath;
+      const currentSettings = loadSettings();
+      currentSettings.lastOpenedFilePath = newFilePath;
+      saveSettings(currentSettings);
+
+      console.log('檔案已另存為，新的預設路徑是:', newFilePath);
+      */
+      return { success: true, path: newFilePath };
+
+    } catch (error) {
+      console.error('另存為失敗:', error);
+      return { success: false, error: true };
+    }
+  });
+//保存加载方面逻辑-----------------------------------------------------------------------------------------
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils

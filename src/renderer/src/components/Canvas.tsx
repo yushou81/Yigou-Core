@@ -67,6 +67,7 @@ declare global {
     api: {
       saveData: (data: { shapes: ShapeData[], camera: CameraState }) => Promise<{ success: boolean, error?: string }>;
       loadData: () => Promise<{ shapes: ShapeData[], camera: CameraState } | null>;
+      saveDataAs: (data: { shapes: ShapeData[], camera: CameraState }) => Promise<{ success: boolean, canceled?: boolean, path?: string, error?: string }>;
     }
   }
 }
@@ -148,7 +149,7 @@ const Canvas: React.FC = () => {
     500 // 防抖延遲時間 (毫秒)，意味著在用戶停止操作 500ms 後才進行儲存。
   );
 
-// 使用 useCallback 來確保這個函式在 shapes 和 cameraState 不變時保持穩定
+// ctrl+s存储逻辑处理函数---------------------------------------------------
   const handleManualSave = useCallback(async() => {
     // 如果 shapes 還沒載入完成，或正在儲存中，則不執行
     if (shapes === null || saveStatus === 'saving') {
@@ -173,7 +174,28 @@ const Canvas: React.FC = () => {
       setSaveStatus('idle'); // 如果失敗，恢復閒置狀態
     }
   }, [shapes, cameraState, saveStatus]); // 依賴項包含 shapes 和 cameraState，確保函式能取到最新的狀態
+// 另存为存储逻辑处理函数--------------------------------------------------------------------
+  const handleSaveAs = async () => {
+    if (shapes === null) {
+      alert('畫布數據尚未載入完成！');
+      return;
+    }
 
+    const dataToSave = { shapes, camera: cameraState };
+
+    // 呼叫我們在 preload 中定義的新 API
+    const result = await window.api.saveDataAs(dataToSave);
+
+    if (result.success) {
+      alert(`檔案已成功儲存至：\n${result.path}`);
+    } else if (result.canceled) {
+      console.log('用戶取消了儲存。');
+    } else {
+      alert(`儲存失敗：\n${result.error}`);
+    }
+  };
+
+//Ctrl+S保存事件监听器------------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // 檢查是否按下了 Ctrl+S (Windows/Linux) 或 Cmd+S (macOS)
@@ -186,18 +208,15 @@ const Canvas: React.FC = () => {
         handleManualSave();
       }
     };
-
     // 在 window 上新增事件監聽器
     window.addEventListener('keydown', handleKeyDown);
-
     // **關鍵**: 組件卸載時，務必移除監聽器，防止記憶體洩漏
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleManualSave]); // 依賴 handleManualSave，確保它能被正確更新
 
-
-  // Keyboard and window resize listeners
+//有关绘画画布的事件监听器----------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -240,6 +259,10 @@ const Canvas: React.FC = () => {
 
   // --- Event Handlers for Panning and Drawing ---
 
+
+
+
+//有关绘画画布的事件处理函数----------------------------------------------------------------------------
   const handleMouseDown = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       const isPanningTriggered =
@@ -372,6 +395,8 @@ const Canvas: React.FC = () => {
     )
   }, [])
 
+
+//画布组件创建函数--------------------------------------------------------------------------------------
   // --- Render Component for All Shape Types ---
   const RenderShape: React.FC<{ data: ShapeData }> = React.memo(function RenderShape({ data }) {
     switch (data.type) {
@@ -438,6 +463,13 @@ const Canvas: React.FC = () => {
         position: 'relative' // 為了定位提示訊息，新增 position
       }}
     >
+
+      <div style={{ position: 'absolute', top: 15, right: 20, zIndex: 10 }}>
+        <button onClick={handleSaveAs} style={{ padding: '8px 12px' }}>
+          另存為...
+        </button>
+      </div>
+
       <Toolbar selectedShape={selectedShapeType} onSelectShape={setSelectedShapeType} />
 
       {/* --- 新增 4: 在畫面上顯示儲存狀態 --- */}

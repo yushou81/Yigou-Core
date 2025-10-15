@@ -7,7 +7,8 @@ const api = {
 
   // 我們定義一個 loadData 函式。
   // 當 React 呼叫 window.electronAPI.loadData() 時...
-  loadData: () => ipcRenderer.invoke('load-data') // ...它會向主進程發送一個名為 'load-data' 的訊息。
+  loadData: () => ipcRenderer.invoke('load-data'), // ...它會向主進程發送一個名為 'load-data' 的訊息。
+  saveDataAs: (data) => ipcRenderer.invoke('save-data-as', data)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
