@@ -66,8 +66,10 @@ declare global {
   interface Window {
     api: {
       saveData: (data: { shapes: ShapeData[], camera: CameraState }) => Promise<{ success: boolean, error?: string }>;
-      loadData: () => Promise<{ shapes: ShapeData[], camera: CameraState } | null>;
+      loadData: () => Promise<{data:{ shapes: ShapeData[], camera: CameraState } | null;filePath: string|null}>;
       saveDataAs: (data: { shapes: ShapeData[], camera: CameraState }) => Promise<{ success: boolean, canceled?: boolean, path?: string, error?: string }>;
+      setTitle: (title: string) => void;
+      openFile: () => Promise<{success: boolean; canceled?: boolean; path?: string; data?: { shapes: ShapeData[], camera: CameraState }; error?: string; }>;
     }
   }
 }
@@ -112,26 +114,53 @@ const Canvas: React.FC = () => {
   const [drawingShape, setDrawingShape] = useState<ShapeData | null>(null)
   // 'idle' (閒置), 'saving' (儲存中), 'saved' (已儲存)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // 'isDirty' 用來追蹤是否有未儲存的變更
+  const [isDirty, setIsDirty] = useState(false);
+  // 'currentFilePath' 用來儲存目前檔案的路徑，以顯示在標題中
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
+  // 使用 ref 來防止初始載入時觸發 isDirty
+  const isInitialLoad = useRef(true);
 
 //------------------------------------------------------------------------------------------------
   useEffect(() => {
     const loadDataFromFile = async () => {
-      // 呼叫我們在 preload.js 中定義的 API
-      const data = await window.api.loadData();
+      const result = await window.api.loadData();
 
-      // 如果成功讀取到數據 (data 不是 null)
-      if (data && data.shapes && data.camera) {
-        // 如果檔案中有圖形數據，就用它來設定 state；如果沒有，則使用預設的 initialShapes。
-        setShapes(data.shapes.length > 0 ? data.shapes : initialShapes);
-        setCameraState(data.camera);
+      setCurrentFilePath(result.filePath); // 儲存檔案路徑
+
+      if (result.data) {
+        setShapes(result.data.shapes.length > 0 ? result.data.shapes : initialShapes);
+        setCameraState(result.data.camera);
       } else {
-        // 如果檔案不存在或內容為空，則使用預設的初始圖形數據。
         setShapes(initialShapes);
+        setCameraState({ scale: 1, x: 0, y: 0 });
       }
+      // 初始載入完成後，狀態是乾淨的
+      setIsDirty(false);
     };
-
     loadDataFromFile();
   }, []);
+
+  useEffect(() => {
+    // 如果是初始載入，我們跳過此 effect，不將狀態設為 dirty
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false; // 將 flag 設為 false，之後的變更就會觸發
+      return;
+    }
+    // 任何 shapes 或 cameraState 的變更都會將 isDirty 設為 true
+    if (shapes !== null) {
+      setIsDirty(true);
+    }
+  }, [shapes, cameraState]);
+
+
+// --- 修改 2: 更新標題更新邏輯 ---
+  useEffect(() => {
+    // 如果路徑為 null，我們顯示一個預設名稱
+    const baseName = currentFilePath ? currentFilePath.split(/[\\/]/).pop()! : '無標題畫布';
+    const newTitle = isDirty ? `${baseName} *` : baseName;
+    window.api.setTitle(newTitle);
+  }, [isDirty, currentFilePath]);
 
   useDebouncedEffect(() => {
       // 如果 shapes 還是 null (表示仍在載入中)，則不執行儲存。
@@ -149,52 +178,104 @@ const Canvas: React.FC = () => {
     500 // 防抖延遲時間 (毫秒)，意味著在用戶停止操作 500ms 後才進行儲存。
   );
 
-// ctrl+s存储逻辑处理函数---------------------------------------------------
-  const handleManualSave = useCallback(async() => {
-    // 如果 shapes 還沒載入完成，或正在儲存中，則不執行
-    if (shapes === null || saveStatus === 'saving') {
-      return;
-    }
 
-    setSaveStatus('saving'); // 顯示儲存中 (可選)
-    console.log('手動儲存觸發...');
-
-    const dataToSave = { shapes, camera: cameraState };
-    const result = await window.api.saveData(dataToSave);
-
-    if (result.success) {
-      console.log('手動儲存成功！');
-      setSaveStatus('saved');
-      // 顯示 "已儲存" 訊息 1.5 秒後自動消失
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 1500);
-    } else {
-      console.error('手動儲存失敗:', result.error);
-      setSaveStatus('idle'); // 如果失敗，恢復閒置狀態
-    }
-  }, [shapes, cameraState, saveStatus]); // 依賴項包含 shapes 和 cameraState，確保函式能取到最新的狀態
 // 另存为存储逻辑处理函数--------------------------------------------------------------------
-  const handleSaveAs = async () => {
-    if (shapes === null) {
-      alert('畫布數據尚未載入完成！');
-      return;
-    }
+  const handleSaveAs = useCallback(async () => {
+    if (shapes === null) return { success: false }; // 回傳結果供呼叫者判斷
 
     const dataToSave = { shapes, camera: cameraState };
-
-    // 呼叫我們在 preload 中定義的新 API
     const result = await window.api.saveDataAs(dataToSave);
 
-    if (result.success) {
-      alert(`檔案已成功儲存至：\n${result.path}`);
+    if (result.success && result.path) {
+      setCurrentFilePath(result.path);
+      setIsDirty(false);
+    }
+    return result; // 將主進程的結果回傳
+  }, [shapes, cameraState]);
+//打开文件逻辑处理函数------------------------------------------------------------
+  const handleOpenFile = async () => {
+    // 如果當前有未儲存的變更，可以給用戶一個提示 (可選，但推薦)
+    if (isDirty) {
+      const confirmed = window.confirm(
+        '你有未儲存的變更，確定要打開新檔案嗎？所有未儲存的進度將會遺失。'
+      );
+      if (!confirmed) {
+        return; // 用戶取消操作
+      }
+    }
+
+    // 呼叫我們在 preload 中定義的 openFile API
+    const result = await window.api.openFile();
+
+    if (result.success && result.data && result.path) {
+      // 關鍵：將打開檔案視為一次新的 "初始載入"
+      // 這可以防止 isDirty 的 useEffect 在狀態更新後立即錯誤地觸發
+      isInitialLoad.current = true;
+
+      // 用讀取到的數據更新畫布狀態
+      setShapes(result.data.shapes);
+      setCameraState(result.data.camera);
+      setCurrentFilePath(result.path);
+
+      // 剛打開的檔案，狀態是乾淨的
+      setCurrentFilePath(result.path);
+      setIsDirty(false);
+
+      console.log(`成功打開檔案: ${result.path}`);
     } else if (result.canceled) {
-      console.log('用戶取消了儲存。');
-    } else {
-      alert(`儲存失敗：\n${result.error}`);
+      console.log('用戶取消了打開檔案。');
+    } else if (result.error) {
+      alert(`打開檔案失敗：\n${result.error}`);
     }
   };
+  // ctrl+s存储逻辑处理函数---------------------------------------------------
+  const handleManualSave = useCallback(async() => {
+    if(currentFilePath === null) {
+      await handleSaveAs();
+    } else {
+      // 如果 shapes 還沒載入完成，或正在儲存中，則不執行
+      if (shapes === null || saveStatus === 'saving') {
+        return;
+      }
 
+      setSaveStatus('saving'); // 顯示儲存中 (可選)
+      console.log('手動儲存觸發...');
+
+      const dataToSave = { shapes, camera: cameraState };
+      const result = await window.api.saveData(dataToSave);
+
+      if (result.success) {
+        console.log('手動儲存成功！');
+        setIsDirty(false);
+        setSaveStatus('saved');
+        // 顯示 "已儲存" 訊息 1.5 秒後自動消失
+        setTimeout(() => {
+          setSaveStatus('idle');
+        }, 1500);
+      } else {
+        console.error('手動儲存失敗:', result.error);
+        setSaveStatus('idle'); // 如果失敗，恢復閒置狀態
+      }
+    }
+  }, [shapes, cameraState, saveStatus,handleSaveAs]); // 依賴項包含 shapes 和 cameraState，確保函式能取到最新的狀態
+//新建画布逻辑处理函数------------------------------------------------------------
+  const handleNewCanvas = async () => {
+    if (isDirty) {
+      const confirmed = window.confirm(
+        '你有未儲存的變更，確定要新建畫布嗎？所有未儲存的進度將會遺失。'
+      );
+      if (!confirmed) return;
+    }
+
+    // 將新建畫布視為一次 "初始載入"
+    isInitialLoad.current = true;
+
+    // 重設所有狀態到初始狀態
+    setCurrentFilePath(null);
+    setShapes(initialShapes); // 或者 []
+    setCameraState({ scale: 1, x: 0, y: 0 });
+    setIsDirty(false);
+  };
 //Ctrl+S保存事件监听器------------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -464,9 +545,17 @@ const Canvas: React.FC = () => {
       }}
     >
 
-      <div style={{ position: 'absolute', top: 15, right: 20, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 15, right: 20, zIndex: 10, display: 'flex', gap: '10px' }}>
+        {/* 新增 "打開..." 按鈕 */}
+        <button onClick={handleOpenFile} style={{ padding: '8px 12px' }}>
+          打開...
+        </button>
         <button onClick={handleSaveAs} style={{ padding: '8px 12px' }}>
           另存為...
+        </button>
+        {/* 新增 "新建" 按鈕 */}
+        <button onClick={handleNewCanvas} style={{ padding: '8px 12px' }}>
+          新建
         </button>
       </div>
 
