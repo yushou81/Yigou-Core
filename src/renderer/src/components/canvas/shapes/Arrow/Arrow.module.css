@@ -1,0 +1,25 @@
+/* Arrow 组件样式 */
+.arrow {
+  /* 基础样式已在 Konva 中处理 */
+  transition: all var(--transition-fast);
+}
+
+.arrow:hover {
+  /* 悬停效果通过 Konva 的 shadowBlur 实现 */
+}
+
+.arrow.selected {
+  /* 选中状态通过 stroke 颜色实现 */
+}
+
+.arrow.dragging {
+  /* 拖拽状态通过 shadowBlur 实现 */
+  cursor: grabbing;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .arrow {
+    /* 移动端可能需要调整阴影效果 */
+  }
+}

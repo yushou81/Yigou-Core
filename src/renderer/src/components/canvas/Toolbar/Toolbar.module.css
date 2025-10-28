@@ -1,0 +1,148 @@
+/* Toolbar 组件样式 */
+.toolbar {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: var(--z-tooltip);
+  background: var(--color-white);
+  border: 1px solid var(--canvas-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-md);
+  min-width: 200px;
+  backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.toolGroupTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-600);
+  margin: 0;
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.toolButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.toolbarButton {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-gray-700);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: grab;
+  transition: all var(--transition-fast);
+  text-align: left;
+  min-height: 40px;
+  user-select: none;
+}
+
+.toolbarButton:hover {
+  background: var(--color-gray-50);
+  border-color: var(--color-gray-200);
+  color: var(--color-gray-800);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbarButton:hover::after {
+  content: "拖拽到画布创建";
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-gray-800);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toolbarButton:active {
+  cursor: grabbing;
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* 移除选中状态样式，因为不再需要点击选择功能 */
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .toolbar {
+    position: fixed;
+    top: auto;
+    bottom: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+    min-width: auto;
+  }
+  
+  .toolButtons {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: var(--spacing-xs);
+  }
+  
+  .toolbarButton {
+    flex-shrink: 0;
+    min-width: 80px;
+    justify-content: center;
+  }
+  
+  .label {
+    display: none;
+  }
+}
+
+/* 暗色主题支持 */
+[data-theme="dark"] .toolbar {
+  background-color: rgba(26, 26, 26, 0.95);
+  border-color: var(--canvas-border);
+}
+
+[data-theme="dark"] .toolbarButton {
+  color: var(--color-gray-300);
+}
+
+[data-theme="dark"] .toolbarButton:hover {
+  background: var(--color-gray-100);
+  color: var(--color-gray-200);
+}
+
+[data-theme="dark"] .toolGroupTitle {
+  color: var(--color-gray-400);
+  border-color: var(--color-gray-200);
+}

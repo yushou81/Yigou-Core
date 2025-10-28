@@ -1,0 +1,45 @@
+/* Node 组件样式 */
+.node {
+  transition: all var(--transition-fast);
+}
+
+.node:hover {
+  /* 悬停效果通过 Konva 的 shadowBlur 实现 */
+}
+
+.node.selected {
+  /* 选中状态通过 stroke 颜色实现 */
+}
+
+.node.dragging {
+  /* 拖拽状态通过 shadowBlur 实现 */
+  cursor: grabbing;
+}
+
+.connectionPoint {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.connectionPoint:hover {
+  transform: scale(1.2);
+}
+
+.connectionPoint.connected {
+  /* 已连接状态 */
+}
+
+.connectionPoint.available {
+  /* 可连接状态 */
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .node {
+    /* 移动端可能需要调整阴影效果 */
+  }
+  
+  .connectionPoint {
+    /* 移动端连接点可能需要调整大小 */
+  }
+}

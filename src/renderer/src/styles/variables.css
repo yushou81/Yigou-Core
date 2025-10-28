@@ -1,0 +1,104 @@
+/* CSS 变量定义 - 设计系统基础 */
+:root {
+  /* 颜色系统 */
+  --color-primary: #3E92CC;
+  --color-primary-hover: #2E7BB8;
+  --color-primary-active: #1E6BA4;
+  
+  --color-secondary: #FF5A5F;
+  --color-secondary-hover: #FF4A4F;
+  --color-secondary-active: #FF3A3F;
+  
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-info: #17a2b8;
+  
+  /* 中性色 */
+  --color-white: #ffffff;
+  --color-gray-50: #f8f9fa;
+  --color-gray-100: #e9ecef;
+  --color-gray-200: #dee2e6;
+  --color-gray-300: #ced4da;
+  --color-gray-400: #adb5bd;
+  --color-gray-500: #6c757d;
+  --color-gray-600: #495057;
+  --color-gray-700: #343a40;
+  --color-gray-800: #212529;
+  --color-gray-900: #000000;
+  
+  /* 画布相关颜色 */
+  --canvas-background: #ffffff;
+  --canvas-grid-dot: #959595;
+  --canvas-border: #e0e0e0;
+  
+  /* 间距系统 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  
+  /* 字体系统 */
+  --font-family-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 24px;
+  
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* 圆角系统 */
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-xl: 16px;
+  --border-radius-full: 50%;
+  
+  /* 阴影系统 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
+  
+  /* 过渡动画 */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 250ms ease-in-out;
+  --transition-slow: 350ms ease-in-out;
+  
+  /* Z-index 层级 */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] {
+  --color-white: #1a1a1a;
+  --color-gray-50: #2d2d2d;
+  --color-gray-100: #3a3a3a;
+  --color-gray-200: #4a4a4a;
+  --color-gray-300: #5a5a5a;
+  --color-gray-400: #6a6a6a;
+  --color-gray-500: #7a7a7a;
+  --color-gray-600: #8a8a8a;
+  --color-gray-700: #9a9a9a;
+  --color-gray-800: #aaaaaa;
+  --color-gray-900: #ffffff;
+  
+  --canvas-background: #1a1a1a;
+  --canvas-grid-dot: #4a4a4a;
+  --canvas-border: #3a3a3a;
+}

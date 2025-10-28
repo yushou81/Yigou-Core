@@ -1,0 +1,235 @@
+.propertyPanel {
+  position: fixed;
+  top: 72px;
+  right: 16px;
+  width: 260px; /* 固定宽度 */
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* 内容高度自适应，无滚动条 */
+  will-change: transform, opacity;
+  /* 避免初次加载闪烁，默认不使用过渡，仅通过关键帧类控制 */
+  transition: none;
+}
+
+@keyframes panelSlideIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes panelSlideOut {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(24px); opacity: 0; }
+}
+
+.animateEnter { animation: panelSlideIn .18s ease forwards; }
+.animateExit { animation: panelSlideOut .18s ease forwards; }
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.propertyHeader {
+  padding: 8px 12px; /* 压缩间距 */
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+}
+
+.headerDeleteButton {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  color: #666;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.headerDeleteButton:hover {
+  background: #f3f4f6;
+  color: #333;
+}
+
+.propertyPanelTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--color-gray-600);
+  cursor: pointer;
+  padding: 4px;
+  transition: color var(--transition-fast);
+}
+
+.closeButton:hover {
+  color: var(--color-gray-800);
+}
+
+.propertyContent {
+  flex: 1;
+  padding: 8px 12px; /* 更紧凑 */
+  background: #fff;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto; /* 纵向滚动条 */
+}
+
+.propertySection {
+  margin-bottom: 24px;
+}
+
+.propertyTitle {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.propertyTitle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 0 2px 2px 0;
+}
+
+.propertyGroup {
+  margin-bottom: 20px;
+}
+
+.propertyGroupTitle {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.propertyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.propertyItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.propertyItem:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.propertyLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.propertyValue {
+  font-size: 12px;
+  color: #333;
+  flex: 1;
+  font-weight: 500;
+}
+
+.propertyInput {
+  flex: 1;
+  padding: 3px 6px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #111;
+  background: #fff;
+}
+
+.iconButton {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.propertyInput:focus {
+  outline: none;
+  border-color: #bbb;
+}
+
+/* 去除滚动条：通过不产生滚动（overflow: visible）与紧凑布局实现 */
+
+/* 暗色主题支持 */
+[data-theme="dark"] .propertyPanel {
+  background: rgba(26, 26, 26, 0.98);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .propertyHeader {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .propertyContent {
+  background: rgba(15, 15, 15, 0.5);
+}
+
+[data-theme="dark"] .propertyItem {
+  background: rgba(40, 40, 40, 0.7);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .propertyItem:hover {
+  background: rgba(50, 50, 50, 0.9);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .propertyInput {
+  background: rgba(40, 40, 40, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--color-gray-200);
+}
+
+[data-theme="dark"] .propertyInput:focus {
+  background: rgba(50, 50, 50, 1);
+  border-color: #3b82f6;
+}

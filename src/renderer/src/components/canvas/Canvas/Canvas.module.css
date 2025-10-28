@@ -1,0 +1,55 @@
+/* Canvas 组件样式 */
+.canvasContainer {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--canvas-background);
+  position: relative;
+  cursor: default;
+}
+
+.stageContainer {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.stage {
+  width: 100%;
+  height: 100%;
+}
+
+.toolbar {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: var(--z-tooltip);
+}
+
+/* 画布状态样式 */
+.canvasContainer.drawing {
+  cursor: crosshair;
+}
+
+.canvasContainer.panning {
+  cursor: grabbing;
+}
+
+.canvasContainer.panning:hover {
+  cursor: grab;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .toolbar {
+    top: auto;
+    bottom: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+}
+
+/* 暗色主题支持 */
+[data-theme="dark"] .canvasContainer {
+  background-color: var(--canvas-background);
+}
