@@ -1,15 +1,16 @@
 /* Toolbar 组件样式 */
 .toolbar {
   position: fixed;
-  top: var(--spacing-md);
+  top: 50%;
+  transform: translateY(-50%);
   left: var(--spacing-md);
   z-index: var(--z-tooltip);
   background: var(--color-white);
   border: 1px solid var(--canvas-border);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: var(--spacing-md);
-  min-width: 200px;
+  padding: 8px;
+  width: 50px; /* 窄条形 */
   backdrop-filter: blur(10px);
   background-color: rgba(255, 255, 255, 0.95);
 }
@@ -21,35 +22,30 @@
 }
 
 .toolGroupTitle {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-gray-600);
-  margin: 0;
-  padding-bottom: var(--spacing-xs);
-  border-bottom: 1px solid var(--color-gray-200);
+  display: none; /* 仅保留图标，隐藏标题 */
 }
 
 .toolButtons {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 6px;
 }
 
 .toolbarButton {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  justify-content: center;
+  padding: 6px;
   border: 1px solid transparent;
   border-radius: var(--border-radius-md);
   background: transparent;
   color: var(--color-gray-700);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  width: 30px;
+  height: 30px; /* 高一点，窄一点 */
   cursor: grab;
   transition: all var(--transition-fast);
-  text-align: left;
-  min-height: 40px;
+  text-align: center;
   user-select: none;
 }
 
@@ -62,11 +58,11 @@
 }
 
 .toolbarButton:hover::after {
-  content: "拖拽到画布创建";
+  content: attr(data-label); /* 悬浮时显示具体组件名称 */
   position: absolute;
-  top: -30px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
   background: var(--color-gray-800);
   color: white;
   padding: 4px 8px;
@@ -95,8 +91,7 @@
 }
 
 .label {
-  flex: 1;
-  white-space: nowrap;
+  display: none; /* 默认隐藏文字，只保留图标 */
 }
 
 /* 响应式设计 */
@@ -106,8 +101,8 @@
     top: auto;
     bottom: var(--spacing-md);
     left: var(--spacing-md);
-    right: var(--spacing-md);
-    min-width: auto;
+    right: auto;
+    width: 56px;
   }
   
   .toolButtons {
@@ -118,8 +113,7 @@
   
   .toolbarButton {
     flex-shrink: 0;
-    min-width: 80px;
-    justify-content: center;
+    width: 40px;
   }
   
   .label {

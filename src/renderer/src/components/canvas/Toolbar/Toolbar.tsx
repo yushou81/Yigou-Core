@@ -5,6 +5,7 @@ import styles from './Toolbar.module.css';
 export interface ToolbarProps {
   onDragStart?: (shapeType: ShapeType, event: React.DragEvent) => void;
   className?: string;
+  onRun?: () => void;
 }
 
 interface ToolbarButtonProps {
@@ -33,9 +34,9 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
       draggable={true}
       aria-label={`拖拽${label}到画布创建`}
       data-shape-type={shapeType}
+      data-label={label}
     >
       {icon && <span className={styles.icon}>{icon}</span>}
-      <span className={styles.label}>{label}</span>
     </button>
   );
 };
@@ -43,12 +44,23 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
 export const Toolbar: React.FC<ToolbarProps> = ({
   onDragStart,
   className,
+  onRun,
 }) => {
   const tools: Array<{
     type: ShapeType;
     label: string;
     icon?: React.ReactNode;
   }> = [
+    {
+      type: 'start',
+      label: '起点',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="4" cy="8" r="2" />
+          <rect x="6" y="3" width="8" height="10" rx="2" />
+        </svg>
+      ),
+    },
     {
       type: 'container',
       label: '容器',
@@ -86,7 +98,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <div className={`${styles.toolbar} ${className || ''}`}>
       <div className={styles.toolGroup}>
-        <h3 className={styles.toolGroupTitle}>绘图工具</h3>
+        <div className={styles.toolButtons}>
+          {onRun && (
+            <button className={styles.toolbarButton} onClick={onRun} aria-label="运行">
+              <span className={styles.icon}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M5 3l8 5-8 5V3z" />
+                </svg>
+              </span>
+            </button>
+          )}
+        </div>
         <div className={styles.toolButtons}>
           {tools.map((tool) => (
             <ToolbarButton

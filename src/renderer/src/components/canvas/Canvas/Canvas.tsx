@@ -6,6 +6,7 @@ import { Toolbar } from '../Toolbar';
 import { Arrow } from '../shapes/Arrow';
 import { Container } from '../components/Container';
 import { Node } from '../shapes/Node';
+import { Start } from '../shapes/Start';
 import { GridBackground } from './GridBackground';
 import { PropertyPanel } from '../PropertyPanel';
 import { screenToWorld, clampCameraScale, findNearestPointOnShapeEdge } from '../../../utils/canvasUtils';
@@ -72,6 +73,15 @@ export const Canvas: React.FC = () => {
     }
   }, [shapes, selectedShapeIds, selectedShapeForProperties]);
 
+  // 同步属性面板中的 shape 引用为最新的 shapes 中对象，确保编辑时受控输入不会被旧引用覆盖
+  useEffect(() => {
+    if (!selectedShapeForProperties) return;
+    const latest = shapes.find(s => s.id === selectedShapeForProperties.id);
+    if (latest && latest !== selectedShapeForProperties) {
+      setSelectedShapeForProperties(latest);
+    }
+  }, [shapes, selectedShapeForProperties]);
+
   // 键盘事件处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -135,7 +145,7 @@ export const Canvas: React.FC = () => {
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 2;
       
-      if (shapeType === 'node') {
+      if (shapeType === 'node' || shapeType === 'start') {
         // 绘制节点图标
         ctx.fillRect(8, 8, 32, 20);
         ctx.fillStyle = 'white';
@@ -215,8 +225,8 @@ export const Canvas: React.FC = () => {
     const worldPos = screenToWorld(x, y, camera);
     
     // 创建形状时调整位置，让形状中心对准鼠标位置
-    const offsetX = shapeType === 'node' ? -50 : -25;
-    const offsetY = shapeType === 'node' ? -30 : 0;
+    const offsetX = (shapeType === 'node' || shapeType === 'start') ? -50 : -25;
+    const offsetY = (shapeType === 'node' || shapeType === 'start') ? -30 : 0;
     
     const newShape = createDefaultShape(shapeType, worldPos.x + offsetX, worldPos.y + offsetY);
     
@@ -409,7 +419,7 @@ export const Canvas: React.FC = () => {
   // 处理箭头点坐标更新：端点靠近 Node 边框时吸附，并记录源/目标节点
   const computeArrowPointsUpdate = useCallback((id: string, newRawPoints: number[]) => {
     const [rawX1, rawY1, rawX2, rawY2] = newRawPoints;
-    const nodes = shapes.filter(s => s.type === 'node' && (s.width || 0) > 0 && (s.height || 0) > 0 && s.visible !== false);
+    const nodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s.width || 0) > 0 && (s.height || 0) > 0 && s.visible !== false);
 
     const SNAP_THRESHOLD_EDGE = 15;
     const startSnap: any = findNearestPointOnShapeEdge(rawX1, rawY1, nodes as any, SNAP_THRESHOLD_EDGE);
@@ -477,11 +487,127 @@ export const Canvas: React.FC = () => {
             onSelect={handleShapeSelect}
             onDragMove={(e, containerId) => {
               const target = e.target; const nx = target.x(); const ny = target.y();
+              const container = shapes.find(s => s.id === containerId);
+              if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
+              const dx = nx - (container.x || 0);
+              const dy = ny - (container.y || 0);
+              // 1) 移动容器
               updateShape(containerId, { x: nx, y: ny });
+              // 2) 让容器内的节点跟随移动，并实时更新其连接的箭头位置
+              const childNodes = shapes.filter(s => s.type === 'node' && (s as any).parentContainerId === containerId);
+              childNodes.forEach(node => {
+                const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
+                updateShape(node.id, { x: newX, y: newY });
+                const movedNode = { ...node, x: newX, y: newY } as any;
+                const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
+                  (s as any).sourceNodeId === node.id || (s as any).targetNodeId === node.id ||
+                  (s as any).startNodeId === node.id || (s as any).endNodeId === node.id
+                ));
+                connectedArrows.forEach(arrow => {
+                  const pts = arrow.points || [0, 0, 0, 0];
+                  let [x1, y1, x2, y2] = pts;
+                  if (((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) && (arrow as any).sourceAttach) {
+                    const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
+                    if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
+                    if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
+                    if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+                  } else if ((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) {
+                    const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
+                    if (snap) { x1 = snap.x; y1 = snap.y; }
+                  }
+                  if (((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) && (arrow as any).targetAttach) {
+                    const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
+                    if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
+                    if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
+                    if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+                  } else if ((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) {
+                    const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
+                    if (snap) { x2 = snap.x; y2 = snap.y; }
+                  }
+                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                });
+              });
+              // 3) 同步容器内的自由箭头端点（未绑定节点的端点）
+              const cx = (container.x || 0), cy = (container.y || 0), cw = (container.width || 0), ch = (container.height || 0);
+              const arrows = shapes.filter(s => s.type === 'arrow') as any[];
+              arrows.forEach(arrow => {
+                const pts = arrow.points || [0, 0, 0, 0];
+                let [x1, y1, x2, y2] = pts;
+                const startAttached = !!(arrow.sourceNodeId || arrow.startNodeId);
+                const endAttached = !!(arrow.targetNodeId || arrow.endNodeId);
+                const startInside = x1 >= cx && x1 <= cx + cw && y1 >= cy && y1 <= cy + ch;
+                const endInside = x2 >= cx && x2 <= cx + cw && y2 >= cy && y2 <= cy + ch;
+                let moved = false;
+                if (!startAttached && startInside) { x1 = x1 + dx; y1 = y1 + dy; moved = true; }
+                if (!endAttached && endInside) { x2 = x2 + dx; y2 = y2 + dy; moved = true; }
+                if (moved) {
+                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                }
+              });
             }}
             onDragEnd={(e, containerId) => {
               const target = e.target; const nx = target.x(); const ny = target.y();
+              const container = shapes.find(s => s.id === containerId);
+              if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
+              const dx = nx - (container.x || 0);
+              const dy = ny - (container.y || 0);
+              // 1) 更新容器位置
               updateShape(containerId, { x: nx, y: ny });
+              // 2) 将容器内所有节点与其箭头位置最终同步
+              const childNodes = shapes.filter(s => s.type === 'node' && (s as any).parentContainerId === containerId);
+              childNodes.forEach(node => {
+                const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
+                updateShape(node.id, { x: newX, y: newY });
+                const movedNode = { ...node, x: newX, y: newY } as any;
+                const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
+                  (s as any).sourceNodeId === node.id || (s as any).targetNodeId === node.id ||
+                  (s as any).startNodeId === node.id || (s as any).endNodeId === node.id
+                ));
+                connectedArrows.forEach(arrow => {
+                  const pts = arrow.points || [0, 0, 0, 0];
+                  let [x1, y1, x2, y2] = pts;
+                  if (((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) && (arrow as any).sourceAttach) {
+                    const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
+                    if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
+                    if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
+                    if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+                  } else if ((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) {
+                    const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
+                    if (snap) { x1 = snap.x; y1 = snap.y; }
+                  }
+                  if (((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) && (arrow as any).targetAttach) {
+                    const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
+                    if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
+                    if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
+                    if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+                  } else if ((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) {
+                    const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
+                    if (snap) { x2 = snap.x; y2 = snap.y; }
+                  }
+                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                });
+              });
+              // 3) 对自由箭头端点做最终同步：两端都在容器内则两端一起移动；仅一端在内则移动该端
+              const cx = (container.x || 0), cy = (container.y || 0), cw = (container.width || 0), ch = (container.height || 0);
+              const arrows = shapes.filter(s => s.type === 'arrow') as any[];
+              arrows.forEach(arrow => {
+                const pts = arrow.points || [0, 0, 0, 0];
+                let [x1, y1, x2, y2] = pts;
+                const startAttached = !!(arrow.sourceNodeId || arrow.startNodeId);
+                const endAttached = !!(arrow.targetNodeId || arrow.endNodeId);
+                const startInside = x1 >= cx && x1 <= cx + cw && y1 >= cy && y1 <= cy + ch;
+                const endInside = x2 >= cx && x2 <= cx + cw && y2 >= cy && y2 <= cy + ch;
+                let moved = false;
+                if (!startAttached && startInside) { x1 = x1 + dx; y1 = y1 + dy; moved = true; }
+                if (!endAttached && endInside) { x2 = x2 + dx; y2 = y2 + dy; moved = true; }
+                if (moved) {
+                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                }
+              });
             }}
             onResize={(id, w, h) => {
               updateShape(id, { width: w, height: h });
@@ -517,7 +643,32 @@ export const Canvas: React.FC = () => {
             data={shape}
             isSelected={isSelected}
             isDragging={isDragging}
-            onDragEnd={handleShapeDragEnd}
+            onDragEnd={(e, nodeId) => {
+              // 先执行原有的箭头同步与吸附逻辑
+              handleShapeDragEnd(e, nodeId);
+              // 再检查归属：如果落在某容器内则归属该容器，否则清空归属
+              // 注意：使用 e.target 获取最终位置，而不是从 shapes 读取（因为 updateShape 是异步的）
+              const target = e.target;
+              const finalX = target.x();
+              const finalY = target.y();
+              const node = shapes.find(s => s.id === nodeId);
+              if (!node) return;
+              const nodeWidth = node.width || 0;
+              const nodeHeight = node.height || 0;
+              const nodeCenterX = finalX + nodeWidth / 2;
+              const nodeCenterY = finalY + nodeHeight / 2;
+              const containers = shapes.filter(s => s.type === 'container' && (s.width || 0) > 0 && (s.height || 0) > 0);
+              const hit = containers.find(c => {
+                const inX = nodeCenterX >= (c.x || 0) && nodeCenterX <= (c.x || 0) + (c.width || 0);
+                const inY = nodeCenterY >= (c.y || 0) && nodeCenterY <= (c.y || 0) + (c.height || 0);
+                return inX && inY;
+              });
+              const currentParent = (node as any).parentContainerId || null;
+              const newParent = hit ? hit.id : null;
+              if (currentParent !== newParent) {
+                updateShape(nodeId, { parentContainerId: newParent });
+              }
+            }}
             onDragMove={(e, nodeId) => {
               // 实时更新与该节点相连的箭头端点，保持连接在同一边同一比例位置
               const target = e.target; const nx = target.x(); const ny = target.y();
@@ -566,6 +717,81 @@ export const Canvas: React.FC = () => {
             }}
           />
         );
+      case 'start':
+        if (isInsideHiddenContainer()) return null;
+        return (
+          <Start
+            key={shape.id}
+            data={shape}
+            isSelected={isSelected}
+            isDragging={isDragging}
+            onDragEnd={(e, nodeId) => {
+              handleShapeDragEnd(e, nodeId);
+              // 注意：使用 e.target 获取最终位置，而不是从 shapes 读取（因为 updateShape 是异步的）
+              const target = e.target;
+              const finalX = target.x();
+              const finalY = target.y();
+              const node = shapes.find(s => s.id === nodeId);
+              if (!node) return;
+              const nodeWidth = node.width || 0;
+              const nodeHeight = node.height || 0;
+              const nodeCenterX = finalX + nodeWidth / 2;
+              const nodeCenterY = finalY + nodeHeight / 2;
+              const containers = shapes.filter(s => s.type === 'container' && (s.width || 0) > 0 && (s.height || 0) > 0);
+              const hit = containers.find(c => {
+                const inX = nodeCenterX >= (c.x || 0) && nodeCenterX <= (c.x || 0) + (c.width || 0);
+                const inY = nodeCenterY >= (c.y || 0) && nodeCenterY <= (c.y || 0) + (c.height || 0);
+                return inX && inY;
+              });
+              const currentParent = (node as any).parentContainerId || null;
+              const newParent = hit ? hit.id : null;
+              if (currentParent !== newParent) {
+                updateShape(nodeId, { parentContainerId: newParent });
+              }
+            }}
+            onDragMove={(e, nodeId) => {
+              const target = e.target; const nx = target.x(); const ny = target.y();
+              const movedNode = { ...shape, x: nx, y: ny } as any;
+              const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
+                (s as any).sourceNodeId === nodeId || (s as any).targetNodeId === nodeId ||
+                (s as any).startNodeId === nodeId || (s as any).endNodeId === nodeId
+              ));
+              connectedArrows.forEach(arrow => {
+                const pts = arrow.points || [0, 0, 0, 0];
+                let [x1, y1, x2, y2] = pts;
+                if (((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) && (arrow as any).sourceAttach) {
+                  const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                  if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
+                  if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
+                  if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
+                  if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+                } else if ((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) {
+                  const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
+                  if (snap) { x1 = snap.x; y1 = snap.y; }
+                }
+                if (((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) && (arrow as any).targetAttach) {
+                  const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                  if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
+                  if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
+                  if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
+                  if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+                } else if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
+                  const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
+                  if (snap) { x2 = snap.x; y2 = snap.y; }
+                }
+                updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+              });
+            }}
+            onResize={(id, w, h) => {
+              updateShape(id, { width: w, height: h });
+            }}
+            onResizeEnd={(id, w, h) => {
+              updateShape(id, { width: w, height: h });
+            }}
+            onSelect={handleShapeSelect}
+            onConnectionPointClick={() => {}}
+          />
+        );
       default:
         return null;
     }
@@ -575,6 +801,89 @@ export const Canvas: React.FC = () => {
     <div className={`${styles.canvasContainer} ${isPanning ? styles.panning : ''}`}>
       <Toolbar 
         onDragStart={handleDragStart}
+        onRun={async () => {
+          // 运行：从起点沿箭头验证输入输出
+          const shapesNow = [...shapes];
+          const nodesById = new Map(shapesNow.filter(s => s.type === 'node' || s.type === 'start').map(s => [s.id, s]));
+          const arrows = shapesNow.filter(s => s.type === 'arrow');
+          const outgoing = new Map<string, any[]>(
+            [...nodesById.keys()].map(id => [id, arrows.filter(a => (a as any).sourceNodeId === id)])
+          );
+
+          const getOutputKeys = (node: any): string[] => {
+            const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
+            if (mode === 'props') {
+              return (node.outputProps || []).filter((k: string) => !!k);
+            }
+            const data = node.outputData && (node.outputData.apiResult || node.outputData);
+            if (data && typeof data === 'object') return Object.keys(data);
+            return [];
+          };
+
+          const getInputKeys = (node: any): string[] => {
+            const mode = node.inputMode || (node.inputDataEnabled ? 'custom' : 'props');
+            if (mode === 'props') return (node.inputProps || []).filter((k: string) => !!k);
+            const data = node.inputData;
+            if (data && typeof data === 'object') return Object.keys(data);
+            return [];
+          };
+
+          const runApiIfNeeded = async (node: any) => {
+            const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
+            if (mode !== 'api') return;
+            if (!node.apiEnabled || !node.apiUrl) return;
+            try {
+              const method = node.apiMethod || 'GET';
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              const init: RequestInit = { method, headers };
+              if (method !== 'GET' && node.apiBody) init.body = node.apiBody;
+              const res = await fetch(node.apiUrl, init);
+              const text = await res.text();
+              let data: any = text; try { data = JSON.parse(text); } catch {}
+              const newOutput = { ...(node.outputData || {}), apiResult: data };
+              updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
+              node.outputData = newOutput;
+            } catch (e) {
+              const newOutput = { ...(node.outputData || {}), apiError: String(e) };
+              updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
+              node.outputData = newOutput;
+            }
+          };
+
+          const starts = shapesNow.filter(s => s.type === 'start');
+          for (const start of starts) {
+            const queue: string[] = [start.id];
+            const visited = new Set<string>();
+            while (queue.length) {
+              const currentId = queue.shift()!;
+              if (visited.has(currentId)) continue;
+              visited.add(currentId);
+              const currentNode = nodesById.get(currentId);
+              if (!currentNode) continue;
+              await runApiIfNeeded(currentNode);
+              const outs = outgoing.get(currentId) || [];
+              for (const arr of outs) {
+                const targetId = (arr as any).targetNodeId;
+                if (!targetId) continue;
+                const targetNode = nodesById.get(targetId);
+                if (!targetNode) continue;
+                // 验证：目标输入 ⊆ 源输出
+                const srcKeys = new Set(getOutputKeys(currentNode));
+                const required = getInputKeys(targetNode);
+                const missing = required.filter(k => !srcKeys.has(k));
+                if (missing.length === 0) {
+                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: OK`);
+                  queue.push(targetId);
+                } else {
+                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: 输入缺失`, missing);
+                }
+              }
+            }
+          }
+          if (starts.length === 0) {
+            console.warn('未找到起点组件');
+          }
+        }}
       />
 
       <div

@@ -3,7 +3,7 @@ import { Rect, Text, Circle, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { ShapeData, ConnectionPoint } from '../../../../types/canvas';
 
-export interface NodeProps {
+export interface StartProps {
   data: ShapeData;
   isSelected?: boolean;
   isDragging?: boolean;
@@ -16,7 +16,7 @@ export interface NodeProps {
   className?: string;
 }
 
-export const Node: React.FC<NodeProps> = ({
+export const Start: React.FC<StartProps> = ({
   data,
   isSelected = false,
   isDragging = false,
@@ -30,90 +30,36 @@ export const Node: React.FC<NodeProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  
+
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
     if (isResizing) {
       try { (e as any).cancelBubble = true; } catch {}
       return;
     }
-    try {
-      const target: any = e.target;
-      console.log('[Node] dragEnd', { id: data.id, finalX: target?.x?.(), finalY: target?.y?.() });
-    } catch {}
-    if (onDragEnd) {
-      onDragEnd(e, data.id);
-    }
+    if (onDragEnd) onDragEnd(e, data.id);
   };
+
   const width = data.width || 200;
-  const height = data.height || 120;
+  const height = data.height || 100;
   const titleHeight = 30;
   const propHeight = 20;
-  const connectionPointRadius = 2; // 更小更简洁
+  const connectionPointRadius = 2;
 
-  // 计算连接点位置
   const connectionPoints = useMemo((): ConnectionPoint[] => {
     const points: ConnectionPoint[] = [];
-    
-    // 四角连接点
-    points.push({
-      id: `${data.id}-topLeft`,
-      type: 'topLeft',
-      x: 0,
-      y: titleHeight / 2,
-      isConnected: false,
-    });
-    
-    points.push({
-      id: `${data.id}-topRight`,
-      type: 'topRight',
-      x: width,
-      y: titleHeight / 2,
-      isConnected: false,
-    });
-    
-    points.push({
-      id: `${data.id}-bottomLeft`,
-      type: 'bottomLeft',
-      x: 0,
-      y: height - titleHeight / 2,
-      isConnected: false,
-    });
-    
-    points.push({
-      id: `${data.id}-bottomRight`,
-      type: 'bottomRight',
-      x: width,
-      y: height - titleHeight / 2,
-      isConnected: false,
-    });
-    
-    // 上下连接点
-    points.push({
-      id: `${data.id}-top`,
-      type: 'top',
-      x: width / 2,
-      y: 0,
-      isConnected: false,
-    });
-    
-    points.push({
-      id: `${data.id}-bottom`,
-      type: 'bottom',
-      x: width / 2,
-      y: height,
-      isConnected: false,
-    });
-    
+    // 允许四边输出连接
+    points.push({ id: `${data.id}-top`, type: 'top', x: width / 2, y: 0, isConnected: false });
+    points.push({ id: `${data.id}-bottom`, type: 'bottom', x: width / 2, y: height, isConnected: false });
+    points.push({ id: `${data.id}-topLeft`, type: 'topLeft', x: 0, y: titleHeight / 2, isConnected: false });
+    points.push({ id: `${data.id}-topRight`, type: 'topRight', x: width, y: titleHeight / 2, isConnected: false });
+    points.push({ id: `${data.id}-bottomLeft`, type: 'bottomLeft', x: 0, y: height - titleHeight / 2, isConnected: false });
+    points.push({ id: `${data.id}-bottomRight`, type: 'bottomRight', x: width, y: height - titleHeight / 2, isConnected: false });
     return points;
   }, [data.id, width, height, titleHeight]);
 
-  
-
   const handleClick = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
-    if (onSelect) {
-      onSelect(data.id);
-    }
+    if (onSelect) onSelect(data.id);
   };
 
   const handleConnectionPointClick = (pointId: string) => {
@@ -122,73 +68,17 @@ export const Node: React.FC<NodeProps> = ({
     }
   };
 
-  // 渲染输入属性
-  const renderInputProps = () => {
-    const inputMode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
-    if (inputMode === 'custom') return null; // 启用自定义输入时，临时取消原输入列表展示
-    if (!data.inputProps || data.inputProps.length === 0) return null;
-    const headerY = titleHeight + 4;
-    const listStartY = titleHeight + propHeight;
-    return (
-      <>
-        <Text
-          x={10}
-          y={headerY}
-          text={"输入"}
-          fontSize={12}
-          fontStyle="bold"
-          fill="#333"
-          listening={false}
-        />
-        {data.inputProps.map((prop, index) => (
-          <Text
-            key={`input-${index}`}
-            x={10}
-            y={listStartY + index * propHeight}
-            text={prop}
-            fontSize={12}
-            fill="#666"
-            width={width - 20}
-            align="left"
-            listening={false}
-          />
-        ))}
-      </>
-    );
-  };
-
-  // 渲染输出属性
   const renderOutputProps = () => {
     const outputMode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
     if (outputMode !== 'props') return null;
     if (!data.outputProps || data.outputProps.length === 0) return null;
-    const hasInputs = (data.inputProps && data.inputProps.length > 0);
-    const baseY = titleHeight + (hasInputs ? (data.inputProps!.length + 1) * propHeight : 0);
-    const headerY = baseY + 4;
-    const listStartY = baseY + propHeight;
+    const headerY = titleHeight + 4;
+    const listStartY = titleHeight + propHeight;
     return (
       <>
-        <Text
-          x={10}
-          y={headerY}
-          text={"输出"}
-          fontSize={12}
-          fontStyle="bold"
-          fill="#333"
-          listening={false}
-        />
+        <Text x={10} y={headerY} text={"输出"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
         {data.outputProps.map((prop, index) => (
-          <Text
-            key={`output-${index}`}
-            x={10}
-            y={listStartY + index * propHeight}
-            text={prop}
-            fontSize={12}
-            fill="#666"
-            width={width - 20}
-            align="left"
-            listening={false}
-          />
+          <Text key={`output-${index}`} x={10} y={listStartY + index * propHeight} text={prop} fontSize={12} fill="#666" width={width - 20} align="left" listening={false} />
         ))}
       </>
     );
@@ -197,7 +87,7 @@ export const Node: React.FC<NodeProps> = ({
   const renderCustomOutputPreview = () => {
     const outputMode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
     if (outputMode === 'props') return null;
-    const headerY = titleHeight + (data.inputProps && (data.inputMode || (data.inputDataEnabled ? 'custom' : 'props')) === 'props' ? (data.inputProps.length + 1) * propHeight : 0) + 4;
+    const headerY = titleHeight + 4;
     const label = outputMode === 'api' ? '输出(API)' : '输出(自定义)';
     const preview = data.outputData ? JSON.stringify(data.outputData).slice(0, 50) : '';
     return (
@@ -210,10 +100,8 @@ export const Node: React.FC<NodeProps> = ({
     );
   };
 
-  // 渲染连接点（只在悬停时显示）
   const renderConnectionPoints = () => {
     if (!isHovered && !isSelected) return null;
-    
     return connectionPoints.map((point) => (
       <Circle
         key={point.id}
@@ -241,10 +129,6 @@ export const Node: React.FC<NodeProps> = ({
           try { (e as any).cancelBubble = true; } catch {}
           return;
         }
-        try {
-          const t: any = e.target;
-          console.log('[Node] dragMove', { id: data.id, x: t?.x?.(), y: t?.y?.(), isResizing });
-        } catch {}
         if (onDragMove) onDragMove(e, data.id);
       }}
       onDragEnd={handleDragEnd}
@@ -252,7 +136,6 @@ export const Node: React.FC<NodeProps> = ({
       onMouseLeave={() => setIsHovered(false)}
       className={className}
     >
-      {/* 主矩形 - 统一白色背景 */}
       <Rect
         width={width}
         height={height}
@@ -264,8 +147,7 @@ export const Node: React.FC<NodeProps> = ({
         shadowOffset={{ x: 1, y: 1 }}
         cornerRadius={8}
       />
-      
-      {/* 标题栏 - 白色背景，浅色边框 */}
+
       <Rect
         width={width}
         height={titleHeight}
@@ -275,12 +157,11 @@ export const Node: React.FC<NodeProps> = ({
         cornerRadius={[8, 8, 0, 0]}
         listening={false}
       />
-      
-      {/* 标题文本 */}
+
       <Text
         x={10}
         y={5}
-        text={data.title || "Node"}
+        text={data.title || 'Start'}
         fontSize={14}
         fontStyle="bold"
         fill="#333"
@@ -288,18 +169,12 @@ export const Node: React.FC<NodeProps> = ({
         align="left"
         listening={false}
       />
-      
-      {/* 输入属性 */}
-      {renderInputProps()}
-      
-      {/* 输出属性 */}
+
       {renderOutputProps()}
       {renderCustomOutputPreview()}
-      
-      {/* 连接点 */}
+
       {renderConnectionPoints()}
 
-      {/* 右下角拉伸手柄 */}
       <Rect
         x={(data.width || width) - 8}
         y={(data.height || height) - 8}
@@ -317,13 +192,7 @@ export const Node: React.FC<NodeProps> = ({
           setIsResizing(true);
           const handle: any = e.target;
           const parent = handle.getParent();
-          if (parent && typeof parent.draggable === 'function') {
-            parent.draggable(false);
-          }
-          try {
-            const parentAbs = parent?.absolutePosition?.() || { x: 0, y: 0 };
-            console.log('[Node] resizeStart', { id: data.id, handleLocal: { x: handle?.x?.(), y: handle?.y?.() }, parentAbs, w: data.width || width, h: data.height || height });
-          } catch {}
+          if (parent && typeof parent.draggable === 'function') parent.draggable(false);
         }}
         dragBoundFunc={function(pos) {
           const node: any = this;
@@ -339,9 +208,6 @@ export const Node: React.FC<NodeProps> = ({
           const localY = handle.y();
           const newW = Math.max(40, localX + 8);
           const newH = Math.max(40, localY + 8);
-          try {
-            console.log('[Node] resizing', { id: data.id, localX, localY, newW, newH });
-          } catch {}
           if (onResize) onResize(data.id, newW, newH);
         }}
         onDragEnd={(e) => {
@@ -352,17 +218,14 @@ export const Node: React.FC<NodeProps> = ({
           const newH = Math.max(40, localY + 8);
           if (onResizeEnd) onResizeEnd(data.id, newW, newH);
           const parent = handle.getParent();
-          if (parent && typeof parent.draggable === 'function') {
-            parent.draggable(true);
-          }
+          if (parent && typeof parent.draggable === 'function') parent.draggable(true);
           setIsResizing(false);
-          try {
-            console.log('[Node] resizeEnd', { id: data.id, localX, localY, newW, newH });
-          } catch {}
         }}
       />
     </Group>
   );
-}
+};
 
-export default Node;
+export default Start;
+
+

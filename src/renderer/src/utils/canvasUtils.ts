@@ -58,6 +58,19 @@ export const createDefaultShape = (
         outputProps: [''],
         ...overrides,
       };
+    case 'start':
+      return {
+        ...baseShape,
+        width: 200,
+        height: 100,
+        fill: '#ffffff',
+        stroke: '#d0d0d0',
+        title: 'Start',
+        // 起点仅需要输出
+        inputProps: [],
+        outputProps: [''],
+        ...overrides,
+      };
     case 'container':
       return {
         ...baseShape,
@@ -141,6 +154,7 @@ export const isPointInShape = (pointX: number, pointY: number, shape: ShapeData)
       // 箭头点击检测比较复杂，这里简化处理
       return false;
     case 'node':
+    case 'start':
       return isPointInRectangle(
         pointX,
         pointY,
@@ -228,6 +242,7 @@ export const getShapeBounds = (shape: ShapeData): {
         height: maxY - minY,
       };
     case 'node':
+    case 'start':
       return {
         x: shape.x,
         y: shape.y,
@@ -378,7 +393,7 @@ export function findNearestPointOnShapeEdge(
 
   for (const shape of shapes) {
     // 只允许对实体组件做边框吸附：必须是节点，且有尺寸并可见
-    if (shape.type !== 'node' || !shape.width || !shape.height || shape.visible === false) continue;
+    if ((shape.type !== 'node' && shape.type !== 'start') || !shape.width || !shape.height || shape.visible === false) continue;
     const { x: sx, y: sy, width: sw, height: sh } = shape;
 
     const top = { x: Math.max(sx, Math.min(x, sx + sw)), y: sy };

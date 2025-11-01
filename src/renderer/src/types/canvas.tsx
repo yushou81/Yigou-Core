@@ -1,6 +1,6 @@
 
 // 图形类型定义
-export type ShapeType = 'arrow' | 'node' | 'container';
+export type ShapeType = 'arrow' | 'node' | 'container' | 'start';
 
 // 连接点类型
 export type ConnectionPointType = 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
@@ -34,7 +34,9 @@ export interface ShapeData {
   
   // Node 特有属性
   inputProps?: string[]; // 输入属性列表
+  inputMode?: 'props' | 'custom'; // 输入渲染模式
   outputProps?: string[]; // 输出属性列表
+  outputMode?: 'props' | 'custom' | 'api'; // 输出渲染模式
   inputData?: Record<string, any>; // 自定义输入数据
   outputData?: Record<string, any>; // 自定义输出数据/运行结果
   inputDataEnabled?: boolean; // 是否启用自定义输入数据

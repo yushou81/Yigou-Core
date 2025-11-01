@@ -97,6 +97,7 @@ export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, 
           const localY = h.y();
           const newW = Math.max(80, localX + 10);
           const newH = Math.max(80, localY + 10);
+          (e as any).cancelBubble = true;
           try {
             console.log('[Container] resizing', { id: data.id, localX, localY, newW, newH });
           } catch {}
@@ -113,7 +114,10 @@ export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, 
           if (parent && typeof parent.draggable === 'function') {
             parent.draggable(true);
           }
-          setIsResizing(false);
+          // 阻止冒泡，避免 Group 在本次事件循环内触发 dragEnd 导致移动
+          (e as any).cancelBubble = true;
+          // 下一 tick 再结束 isResizing，确保不会触发本次 dragEnd 移动
+          setTimeout(() => setIsResizing(false), 0);
           try {
             console.log('[Container] resizeEnd', { id: data.id, localX, localY, newW, newH });
           } catch {}

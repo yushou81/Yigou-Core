@@ -26,18 +26,28 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   }, [shape]);
 
   const forceRerender = useState(0)[1];
-  const { deleteShape } = useCanvas();
+  const { deleteShape, updateShape } = useCanvas();
+
+  // 自定义输入/输出文本本地缓冲，避免未成对 JSON 在输入中被强制回退
+  const [inputDataText, setInputDataText] = useState<string>(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
+  const [outputDataText, setOutputDataText] = useState<string>(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
+
+  useEffect(() => {
+    setInputDataText(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
+    setOutputDataText(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
+  }, [shape.id, shape.inputData, shape.outputData]);
 
   const handleInputChange = (path: 'inputProps' | 'outputProps', index: number, value: string) => {
     if (!shape) return;
+    let next: string[] = [];
     if (path === 'inputProps') {
-      const next = [...(shape.inputProps || [])];
+      next = [...(shape.inputProps || [])];
       next[index] = value;
-      shape.inputProps = next;
+      updateShape(shape.id, { inputProps: next });
     } else {
-      const next = [...(shape.outputProps || [])];
+      next = [...(shape.outputProps || [])];
       next[index] = value;
-      shape.outputProps = next;
+      updateShape(shape.id, { outputProps: next });
     }
     forceRerender(x => x + 1);
   };
@@ -46,7 +56,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     if (!shape) return;
     const list = [...(shape[path] || [])];
     list.push('');
-    (shape as any)[path] = list;
+    updateShape(shape.id, { [path]: list });
     forceRerender(x => x + 1);
   };
 
@@ -54,12 +64,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     if (!shape) return;
     const list = [...(shape[path] || [])];
     list.splice(index, 1);
-    (shape as any)[path] = list;
+    updateShape(shape.id, { [path]: list });
     forceRerender(x => x + 1);
   };
 
   const handleNodeTitleChange = (value: string) => {
-    shape.title = value;
+    if (!shape) return;
+    updateShape(shape.id, { title: value });
     forceRerender(x => x + 1);
   };
 
@@ -111,7 +122,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         />
       </div>
 
-      {shape.inputProps && shape.inputProps.length > 0 && (
+      {(shape.inputMode || (shape.inputDataEnabled ? 'custom' : 'props')) === 'props' && shape.inputProps && shape.inputProps.length > 0 && (
         <div className={styles.propertyGroup}>
           <h4 className={styles.propertyGroupTitle}>输入属性</h4>
           <div className={styles.propertyList}>
@@ -136,7 +147,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         </div>
       )}
       
-      {shape.outputProps && shape.outputProps.length > 0 && (
+      {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'props' && shape.outputProps && shape.outputProps.length > 0 && (
         <div className={styles.propertyGroup}>
           <h4 className={styles.propertyGroupTitle}>输出属性</h4>
           <div className={styles.propertyList}>
@@ -164,20 +175,30 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       <div className={styles.propertyGroup}>
         <div className={styles.propertyItem}>
           <label>
-            <input type="checkbox" checked={!!shape.inputDataEnabled} onChange={(e) => { shape.inputDataEnabled = e.target.checked; forceRerender(x => x + 1); }} /> 启用自定义输入数据
+            <input
+              type="checkbox"
+              checked={(shape.inputMode || (shape.inputDataEnabled ? 'custom' : 'props')) === 'custom'}
+              onChange={(e) => {
+                const enable = e.target.checked;
+                updateShape(shape.id, { inputDataEnabled: enable, inputMode: enable ? 'custom' : 'props' });
+                forceRerender(x => x + 1);
+              }}
+            /> 自定义输入数据
           </label>
         </div>
-        {shape.inputDataEnabled && (
+        {(shape.inputMode || (shape.inputDataEnabled ? 'custom' : 'props')) === 'custom' && (
           <textarea
             className={styles.propertyTextarea}
             placeholder={`{\n  "key": "value"\n}`}
-            value={JSON.stringify(shape.inputData || {}, null, 2)}
+            value={inputDataText}
             onChange={(e) => {
+              setInputDataText(e.target.value);
+            }}
+            onBlur={() => {
               try {
-                const val = JSON.parse(e.target.value || '{}');
-                (shape as any).inputData = val;
+                const val = JSON.parse(inputDataText || '{}');
+                updateShape(shape.id, { inputData: val });
               } catch {}
-              forceRerender(x => x + 1);
             }}
           />
         )}
@@ -185,23 +206,60 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
 
       <div className={styles.propertyGroup}>
         <div className={styles.propertyItem}>
-          <label>
-            <input type="checkbox" checked={!!shape.outputDataEnabled} onChange={(e) => { shape.outputDataEnabled = e.target.checked; forceRerender(x => x + 1); }} /> 启用自定义输出数据
-          </label>
+          <div className={styles.propertyList}>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'props'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'props', outputDataEnabled: false, apiUseAsOutput: false });
+                  forceRerender(x => x + 1);
+                }}
+              /> 使用输出属性
+            </label>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'custom'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'custom', outputDataEnabled: true, apiUseAsOutput: false });
+                  forceRerender(x => x + 1);
+                }}
+              /> 自定义输出
+            </label>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'api'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'api', outputDataEnabled: false, apiUseAsOutput: true });
+                  forceRerender(x => x + 1);
+                }}
+              /> 使用 API 输出
+            </label>
+          </div>
         </div>
-        {shape.outputDataEnabled && (
+        {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'custom' && (
           <textarea
             className={styles.propertyTextarea}
             placeholder="运行结果或手动设定的输出"
-            value={JSON.stringify(shape.outputData || {}, null, 2)}
+            value={outputDataText}
             onChange={(e) => {
+              setOutputDataText(e.target.value);
+            }}
+            onBlur={() => {
               try {
-                const val = JSON.parse(e.target.value || '{}');
-                (shape as any).outputData = val;
+                const val = JSON.parse(outputDataText || '{}');
+                updateShape(shape.id, { outputData: val });
               } catch {}
-              forceRerender(x => x + 1);
             }}
           />
+        )}
+        {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'api' && (
+          <div className={styles.propertyHint}>将使用最近一次 API 运行结果作为输出（在“调用 API”中运行）。</div>
         )}
       </div>
 
@@ -282,6 +340,146 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     </div>
   );
 
+  const renderStartProperties = () => (
+    <div className={styles.propertySection}>
+      <div className={styles.propertyGroup}>
+        <h4 className={styles.propertyGroupTitle}>名称</h4>
+        <input
+          type="text"
+          value={shape.title || ''}
+          placeholder="起点名称"
+          className={styles.propertyInput}
+          onChange={(e) => handleNodeTitleChange(e.target.value)}
+        />
+      </div>
+
+      {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'props' && shape.outputProps && shape.outputProps.length > 0 && (
+        <div className={styles.propertyGroup}>
+          <h4 className={styles.propertyGroupTitle}>输出属性</h4>
+          <div className={styles.propertyList}>
+            {shape.outputProps.map((prop, index) => (
+              <div key={`output-${index}`} className={styles.propertyItem}>
+                <span className={styles.propertyLabel}>{`输出${index+1}`}:</span>
+                <input 
+                  type="text" 
+                  value={prop}
+                  onChange={(e) => handleInputChange('outputProps', index, e.target.value)}
+                  className={styles.propertyInput}
+                />
+                <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
+                  <span className={styles.icon}>×</span>
+                </button>
+              </div>
+            ))}
+          </div>
+          <button className={styles.iconButton} onClick={() => handleAddProp('outputProps')} title="新增输出">
+            <span className={styles.icon}>＋</span>
+          </button>
+        </div>
+      )}
+
+      <div className={styles.propertyGroup}>
+        <div className={styles.propertyItem}>
+          <div className={styles.propertyList}>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'props'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'props', outputDataEnabled: false, apiUseAsOutput: false });
+                  forceRerender(x => x + 1);
+                }}
+              /> 使用输出属性
+            </label>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'custom'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'custom', outputDataEnabled: true, apiUseAsOutput: false });
+                  forceRerender(x => x + 1);
+                }}
+              /> 自定义输出
+            </label>
+            <label className={styles.propertyItem}>
+              <input
+                type="radio"
+                name="outputMode"
+                checked={(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'api'}
+                onChange={() => {
+                  updateShape(shape.id, { outputMode: 'api', outputDataEnabled: false, apiUseAsOutput: true });
+                  forceRerender(x => x + 1);
+                }}
+              /> 使用 API 输出
+            </label>
+          </div>
+        </div>
+        {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'custom' && (
+          <textarea
+            className={styles.propertyTextarea}
+            placeholder="运行结果或手动设定的输出"
+            value={outputDataText}
+            onChange={(e) => {
+              setOutputDataText(e.target.value);
+            }}
+            onBlur={() => {
+              try {
+                const val = JSON.parse(outputDataText || '{}');
+                updateShape(shape.id, { outputData: val });
+              } catch {}
+            }}
+          />
+        )}
+        {(shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'))) === 'api' && (
+          <div className={styles.propertyHint}>将使用最近一次 API 运行结果作为输出（在“调用 API”中运行）。</div>
+        )}
+      </div>
+
+      <div className={styles.propertyGroup}>
+        <h4 className={styles.propertyGroupTitle}>调用 API</h4>
+        <div className={styles.propertyItem}>
+          <label>
+            <input type="checkbox" checked={!!shape.apiEnabled} onChange={(e) => handleApiToggle(e.target.checked)} /> 启用 API
+          </label>
+        </div>
+        {shape.apiEnabled && (
+          <div className={styles.propertyList}>
+            <div className={styles.propertyItem}>
+              <span className={styles.propertyLabel}>方法</span>
+              <select className={styles.propertySelect} value={shape.apiMethod || 'GET'} onChange={(e) => handleApiConfigChange('apiMethod', e.target.value as any)}>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </div>
+            <div className={styles.propertyItem}>
+              <span className={styles.propertyLabel}>URL</span>
+              <input className={styles.propertyInput} type="text" value={shape.apiUrl || ''} onChange={(e) => handleApiConfigChange('apiUrl', e.target.value)} placeholder="https://api.example.com" />
+            </div>
+            {shape.apiMethod !== 'GET' && (
+              <div className={styles.propertyItem}>
+                <span className={styles.propertyLabel}>Body</span>
+                <textarea className={styles.propertyTextarea} value={shape.apiBody || ''} onChange={(e) => handleApiConfigChange('apiBody', e.target.value)} placeholder={`{"key":"value"}`} />
+              </div>
+            )}
+            <div className={styles.propertyItem}>
+              <label>
+                <input type="checkbox" checked={!!shape.apiUseAsOutput} onChange={(e) => handleApiConfigChange('apiUseAsOutput', e.target.checked)} /> 根据调用 API 作为输出
+              </label>
+            </div>
+            <div className={styles.propertyActions}>
+              <button className={styles.propertyButton} onClick={runApi}>运行</button>
+              {shape.lastRunAt && <span className={styles.propertyHint}>最近运行: {new Date(shape.lastRunAt).toLocaleString()}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className={`${styles.propertyPanel} ${animateClass}`}>
       <div className={styles.propertyHeader}>
@@ -299,6 +497,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       
       <div className={styles.propertyContent}>
         {shape.type === 'node' && renderNodeProperties()}
+        {shape.type === 'start' && renderStartProperties()}
         {shape.type === 'container' && renderContainerProperties()}
         {shape.type === 'arrow' && renderArrowProperties()}
       </div>
