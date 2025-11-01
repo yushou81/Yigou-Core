@@ -802,32 +802,61 @@ export const Canvas: React.FC = () => {
       <Toolbar 
         onDragStart={handleDragStart}
         onRun={async () => {
-          // 运行：从起点沿箭头验证输入输出
+          // 1. 先清除所有箭头状态
+          const arrows = shapes.filter(s => s.type === 'arrow');
+          arrows.forEach(arrow => {
+            updateShape(arrow.id, { validationStatus: null });
+          });
+
+          // 2. 运行：从起点沿箭头验证输入输出并传递数据
           const shapesNow = [...shapes];
           const nodesById = new Map(shapesNow.filter(s => s.type === 'node' || s.type === 'start').map(s => [s.id, s]));
-          const arrows = shapesNow.filter(s => s.type === 'arrow');
+          const arrowsNow = shapesNow.filter(s => s.type === 'arrow');
           const outgoing = new Map<string, any[]>(
-            [...nodesById.keys()].map(id => [id, arrows.filter(a => (a as any).sourceNodeId === id)])
+            [...nodesById.keys()].map(id => [id, arrowsNow.filter(a => (a as any).sourceNodeId === id || (a as any).startNodeId === id)])
           );
 
-          const getOutputKeys = (node: any): string[] => {
+          // 获取节点的输出数据（完整数据对象，不只是keys）
+          const getOutputData = (node: any): Record<string, any> => {
             const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
             if (mode === 'props') {
-              return (node.outputProps || []).filter((k: string) => !!k);
+              // props模式：从outputProps构建数据对象
+              const props = (node.outputProps || []).filter((k: string) => !!k);
+              const data: Record<string, any> = {};
+              props.forEach((prop: string) => {
+                // 假设属性名就是key，值可以从outputData中获取或使用默认值
+                const existing = node.outputData && node.outputData[prop];
+                data[prop] = existing !== undefined ? existing : null;
+              });
+              return data;
             }
-            const data = node.outputData && (node.outputData.apiResult || node.outputData);
-            if (data && typeof data === 'object') return Object.keys(data);
-            return [];
+            // custom或api模式：直接使用outputData
+            const data = node.outputData;
+            if (mode === 'api' && data && data.apiResult) {
+              return typeof data.apiResult === 'object' ? data.apiResult : { apiResult: data.apiResult };
+            }
+            return data && typeof data === 'object' ? data : {};
           };
 
+          // 获取节点的输出keys（用于验证）
+          const getOutputKeys = (node: any): string[] => {
+            const data = getOutputData(node);
+            return Object.keys(data).filter(k => data[k] !== undefined && data[k] !== null);
+          };
+
+          // 获取目标节点需要的输入keys
           const getInputKeys = (node: any): string[] => {
             const mode = node.inputMode || (node.inputDataEnabled ? 'custom' : 'props');
-            if (mode === 'props') return (node.inputProps || []).filter((k: string) => !!k);
+            if (mode === 'props') {
+              return (node.inputProps || []).filter((k: string) => !!k);
+            }
+            // custom模式：如果已经有inputData，使用其keys，否则返回空（允许任意输入）
             const data = node.inputData;
             if (data && typeof data === 'object') return Object.keys(data);
             return [];
           };
 
+          // 运行API获取输出数据
           const runApiIfNeeded = async (node: any) => {
             const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
             if (mode !== 'api') return;
@@ -850,6 +879,28 @@ export const Canvas: React.FC = () => {
             }
           };
 
+          // 传递数据到目标节点
+          const passDataToTarget = (sourceData: Record<string, any>, targetNode: any) => {
+            const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+            if (mode === 'props') {
+              // props模式：根据inputProps构建inputData
+              const inputProps = (targetNode.inputProps || []).filter((k: string) => !!k);
+              const newInputData: Record<string, any> = {};
+              inputProps.forEach((prop: string) => {
+                if (sourceData[prop] !== undefined) {
+                  newInputData[prop] = sourceData[prop];
+                }
+              });
+              updateShape(targetNode.id, { inputData: newInputData });
+              targetNode.inputData = newInputData;
+            } else {
+              // custom模式：直接传递所有输出数据
+              updateShape(targetNode.id, { inputData: { ...sourceData } });
+              targetNode.inputData = { ...sourceData };
+            }
+          };
+
+          // 从起点开始遍历
           const starts = shapesNow.filter(s => s.type === 'start');
           for (const start of starts) {
             const queue: string[] = [start.id];
@@ -860,22 +911,48 @@ export const Canvas: React.FC = () => {
               visited.add(currentId);
               const currentNode = nodesById.get(currentId);
               if (!currentNode) continue;
+
+              // 运行API获取输出（如果需要）
               await runApiIfNeeded(currentNode);
+
+              // 获取源节点的输出数据
+              const sourceOutputData = getOutputData(currentNode);
+              const sourceOutputKeys = getOutputKeys(currentNode);
+
+              // 处理所有从当前节点出发的箭头
               const outs = outgoing.get(currentId) || [];
               for (const arr of outs) {
-                const targetId = (arr as any).targetNodeId;
-                if (!targetId) continue;
+                const arrowId = arr.id;
+                const targetId = (arr as any).targetNodeId || (arr as any).endNodeId;
+                if (!targetId) {
+                  // 箭头未连接到目标，标记为错误
+                  updateShape(arrowId, { validationStatus: 'error' });
+                  continue;
+                }
+
                 const targetNode = nodesById.get(targetId);
-                if (!targetNode) continue;
+                if (!targetNode) {
+                  updateShape(arrowId, { validationStatus: 'error' });
+                  continue;
+                }
+
+                // 标记箭头为验证中
+                updateShape(arrowId, { validationStatus: 'pending' });
+
                 // 验证：目标输入 ⊆ 源输出
-                const srcKeys = new Set(getOutputKeys(currentNode));
-                const required = getInputKeys(targetNode);
-                const missing = required.filter(k => !srcKeys.has(k));
-                if (missing.length === 0) {
-                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: OK`);
+                const requiredInputKeys = getInputKeys(targetNode);
+                const missingKeys = requiredInputKeys.filter(k => !sourceOutputKeys.includes(k));
+
+                if (missingKeys.length === 0) {
+                  // 验证成功：箭头变绿，传递数据，继续到目标节点
+                  updateShape(arrowId, { validationStatus: 'success' });
+                  passDataToTarget(sourceOutputData, targetNode);
+                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ✅ 验证成功`);
                   queue.push(targetId);
                 } else {
-                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: 输入缺失`, missing);
+                  // 验证失败：箭头变红，停止该路径
+                  updateShape(arrowId, { validationStatus: 'error' });
+                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ❌ 输入缺失`, missingKeys);
                 }
               }
             }

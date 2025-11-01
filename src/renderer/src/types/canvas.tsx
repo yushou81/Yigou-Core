@@ -63,6 +63,8 @@ export interface ShapeData {
   // 新增：用于显示名称与隐藏存储ID
   sourceNodeId?: string; // 源节点 ID（内部使用，不展示）
   targetNodeId?: string; // 目标节点 ID（内部使用，不展示）
+  // 箭头验证状态
+  validationStatus?: 'pending' | 'success' | 'error' | null; // 验证状态：待验证/成功/失败
 
   // Container 特有属性
   collapsed?: boolean; // 是否折叠/收起（可选）

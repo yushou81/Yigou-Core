@@ -35,8 +35,14 @@ export const Arrow: React.FC<ArrowProps> = ({
     [points]
   );
 
-  // 固定描边颜色，避免 hover 导致频繁重绘引起的闪烁
-  const strokeColor = isSelected ? '#111' : '#555';
+  // 根据验证状态和选中状态确定颜色
+  const strokeColor = useMemo(() => {
+    if (data.validationStatus === 'success') return '#22c55e'; // 绿色-成功
+    if (data.validationStatus === 'error') return '#ef4444'; // 红色-失败
+    if (data.validationStatus === 'pending') return '#f59e0b'; // 橙色-验证中
+    // 默认颜色
+    return isSelected ? '#111' : '#555';
+  }, [data.validationStatus, isSelected]);
   const strokeWidth = isSelected ? 3 : 2;
 
   const handleBodyClick = (e: KonvaEventObject<MouseEvent>) => {
