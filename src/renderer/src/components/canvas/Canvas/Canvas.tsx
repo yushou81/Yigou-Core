@@ -228,14 +228,38 @@ export const Canvas: React.FC = () => {
     const offsetX = (shapeType === 'node' || shapeType === 'start') ? -50 : -25;
     const offsetY = (shapeType === 'node' || shapeType === 'start') ? -30 : 0;
     
-    const newShape = createDefaultShape(shapeType, worldPos.x + offsetX, worldPos.y + offsetY);
+    const finalX = worldPos.x + offsetX;
+    const finalY = worldPos.y + offsetY;
+    
+    // 创建临时 shape 以获取实际尺寸
+    const tempShape = createDefaultShape(shapeType, finalX, finalY);
+    
+    // 对于 node 和 start 类型，先检查是否落在容器内
+    let parentContainerId: string | null = null;
+    if (shapeType === 'node' || shapeType === 'start') {
+      const nodeWidth = tempShape.width || 0;
+      const nodeHeight = tempShape.height || 0;
+      const nodeCenterX = finalX + nodeWidth / 2;
+      const nodeCenterY = finalY + nodeHeight / 2;
+      const containers = shapes.filter(s => s.type === 'container' && (s.width || 0) > 0 && (s.height || 0) > 0);
+      const hit = containers.find(c => {
+        const inX = nodeCenterX >= (c.x || 0) && nodeCenterX <= (c.x || 0) + (c.width || 0);
+        const inY = nodeCenterY >= (c.y || 0) && nodeCenterY <= (c.y || 0) + (c.height || 0);
+        return inX && inY;
+      });
+      if (hit) {
+        parentContainerId = hit.id;
+      }
+    }
+    
+    const newShape = createDefaultShape(shapeType, finalX, finalY, parentContainerId ? { parentContainerId } : {});
     
     if (shapeType === 'arrow') {
       startDrawing(newShape);
     } else {
       addShape(newShape);
     }
-  }, [camera, startDrawing, addShape]);
+  }, [camera, startDrawing, addShape, shapes]);
 
   // 鼠标按下事件
   const handleMouseDown = useCallback((e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -491,57 +515,144 @@ export const Canvas: React.FC = () => {
               if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
               const dx = nx - (container.x || 0);
               const dy = ny - (container.y || 0);
+              
               // 1) 移动容器
               updateShape(containerId, { x: nx, y: ny });
               // 2) 让容器内的节点跟随移动，并实时更新其连接的箭头位置
-              const childNodes = shapes.filter(s => s.type === 'node' && (s as any).parentContainerId === containerId);
+              const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
+              
+              // 先计算所有节点的新位置
+              const movedNodes = new Map<string, any>();
               childNodes.forEach(node => {
                 const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
                 updateShape(node.id, { x: newX, y: newY });
-                const movedNode = { ...node, x: newX, y: newY } as any;
+                movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
+              });
+              
+              // 收集所有连接到容器内节点的箭头，避免重复更新
+              const arrowsToUpdate = new Map<string, any>();
+              childNodes.forEach(node => {
                 const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
                   (s as any).sourceNodeId === node.id || (s as any).targetNodeId === node.id ||
                   (s as any).startNodeId === node.id || (s as any).endNodeId === node.id
                 ));
                 connectedArrows.forEach(arrow => {
-                  const pts = arrow.points || [0, 0, 0, 0];
-                  let [x1, y1, x2, y2] = pts;
-                  if (((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) && (arrow as any).sourceAttach) {
+                  if (!arrowsToUpdate.has(arrow.id)) {
+                    arrowsToUpdate.set(arrow.id, arrow);
+                  }
+                });
+              });
+              
+              // 容器旧边界（用于检查自由端点是否在容器内）
+              const oldCx = (container.x || 0), oldCy = (container.y || 0);
+              const cw = (container.width || 0), ch = (container.height || 0);
+              
+              // 统一更新所有箭头的位置
+              arrowsToUpdate.forEach(arrow => {
+                const pts = arrow.points || [0, 0, 0, 0];
+                let [x1, y1, x2, y2] = pts;
+                const originalPoints = [x1, y1, x2, y2];
+                const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
+                const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+                
+                // 更新起点
+                if (startNodeId && movedNodes.has(startNodeId)) {
+                  const movedNode = movedNodes.get(startNodeId);
+                  if ((arrow as any).sourceAttach) {
                     const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                     if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                     if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
-                  } else if ((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) {
+                  } else {
                     const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
                     if (snap) { x1 = snap.x; y1 = snap.y; }
                   }
-                  if (((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) && (arrow as any).targetAttach) {
+                } else if (!startNodeId) {
+                  // 起点未连接节点，检查是否是自由端点且在容器内
+                  const startInside = x1 >= oldCx && x1 <= oldCx + cw && y1 >= oldCy && y1 <= oldCy + ch;
+                  if (startInside) {
+                    x1 = x1 + dx;
+                    y1 = y1 + dy;
+                  }
+                }
+                
+                // 更新终点
+                if (endNodeId && movedNodes.has(endNodeId)) {
+                  const movedNode = movedNodes.get(endNodeId);
+                  if ((arrow as any).targetAttach) {
                     const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                     if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                     if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
-                  } else if ((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) {
+                  } else {
                     const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
                     if (snap) { x2 = snap.x; y2 = snap.y; }
                   }
+                } else if (!endNodeId) {
+                  // 终点未连接节点，检查是否是自由端点且在容器内
+                  const endInside = x2 >= oldCx && x2 <= oldCx + cw && y2 >= oldCy && y2 <= oldCy + ch;
+                  if (endInside) {
+                    x2 = x2 + dx;
+                    y2 = y2 + dy;
+                  }
+                }
+                
+                const finalPoints = [x1, y1, x2, y2];
+                const pointsChanged = JSON.stringify(originalPoints) !== JSON.stringify(finalPoints);
+                
+                if (pointsChanged) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
-                });
+                }
               });
-              // 3) 同步容器内的自由箭头端点（未绑定节点的端点）
-              const cx = (container.x || 0), cy = (container.y || 0), cw = (container.width || 0), ch = (container.height || 0);
-              const arrows = shapes.filter(s => s.type === 'arrow') as any[];
-              arrows.forEach(arrow => {
+              // 3) 同步容器内的自由箭头端点（未绑定节点的端点，或者连接到容器外节点的端点但端点本身在容器内）
+              // 跳过已经在步骤2中更新过的箭头
+              const allArrows = shapes.filter(s => s.type === 'arrow') as any[];
+              const updatedArrowIds = new Set(arrowsToUpdate.keys());
+              
+              allArrows.forEach(arrow => {
+                // 如果箭头已经在步骤2中更新过，跳过
+                if (updatedArrowIds.has(arrow.id)) {
+                  return;
+                }
+                
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
-                const startAttached = !!(arrow.sourceNodeId || arrow.startNodeId);
-                const endAttached = !!(arrow.targetNodeId || arrow.endNodeId);
-                const startInside = x1 >= cx && x1 <= cx + cw && y1 >= cy && y1 <= cy + ch;
-                const endInside = x2 >= cx && x2 <= cx + cw && y2 >= cy && y2 <= cy + ch;
+                const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
+                const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+                
+                // 检查起点连接的节点是否在容器内
+                const sourceNodeInContainer = startNodeId ? (() => {
+                  const sourceNode = shapes.find(s => s.id === startNodeId);
+                  return sourceNode && (sourceNode as any).parentContainerId === containerId;
+                })() : false;
+                
+                // 检查终点连接的节点是否在容器内
+                const targetNodeInContainer = endNodeId ? (() => {
+                  const targetNode = shapes.find(s => s.id === endNodeId);
+                  return targetNode && (targetNode as any).parentContainerId === containerId;
+                })() : false;
+                
+                // 使用旧的容器位置来检查端点是否在容器内（因为箭头端点还是旧坐标）
+                const startInside = x1 >= oldCx && x1 <= oldCx + cw && y1 >= oldCy && y1 <= oldCy + ch;
+                const endInside = x2 >= oldCx && x2 <= oldCx + cw && y2 >= oldCy && y2 <= oldCy + ch;
+                
                 let moved = false;
-                if (!startAttached && startInside) { x1 = x1 + dx; y1 = y1 + dy; moved = true; }
-                if (!endAttached && endInside) { x2 = x2 + dx; y2 = y2 + dy; moved = true; }
+                // 如果起点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
+                if (startInside && !sourceNodeInContainer) {
+                  x1 = x1 + dx;
+                  y1 = y1 + dy;
+                  moved = true;
+                }
+                
+                // 如果终点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
+                if (endInside && !targetNodeInContainer) {
+                  x2 = x2 + dx;
+                  y2 = y2 + dy;
+                  moved = true;
+                }
+                
                 if (moved) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
                 }
@@ -556,54 +667,117 @@ export const Canvas: React.FC = () => {
               // 1) 更新容器位置
               updateShape(containerId, { x: nx, y: ny });
               // 2) 将容器内所有节点与其箭头位置最终同步
-              const childNodes = shapes.filter(s => s.type === 'node' && (s as any).parentContainerId === containerId);
+              const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
+              // 先计算所有节点的新位置
+              const movedNodes = new Map<string, any>();
               childNodes.forEach(node => {
                 const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
                 updateShape(node.id, { x: newX, y: newY });
-                const movedNode = { ...node, x: newX, y: newY } as any;
+                movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
+              });
+              
+              // 收集所有连接到容器内节点的箭头，避免重复更新
+              const arrowsToUpdate = new Map<string, any>();
+              childNodes.forEach(node => {
                 const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
                   (s as any).sourceNodeId === node.id || (s as any).targetNodeId === node.id ||
                   (s as any).startNodeId === node.id || (s as any).endNodeId === node.id
                 ));
                 connectedArrows.forEach(arrow => {
-                  const pts = arrow.points || [0, 0, 0, 0];
-                  let [x1, y1, x2, y2] = pts;
-                  if (((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) && (arrow as any).sourceAttach) {
+                  if (!arrowsToUpdate.has(arrow.id)) {
+                    arrowsToUpdate.set(arrow.id, arrow);
+                  }
+                });
+              });
+              
+              // 统一更新所有箭头的位置
+              arrowsToUpdate.forEach(arrow => {
+                const pts = arrow.points || [0, 0, 0, 0];
+                let [x1, y1, x2, y2] = pts;
+                const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
+                const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+                
+                // 更新起点
+                if (startNodeId && movedNodes.has(startNodeId)) {
+                  const movedNode = movedNodes.get(startNodeId);
+                  if ((arrow as any).sourceAttach) {
                     const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                     if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                     if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
-                  } else if ((arrow as any).sourceNodeId === node.id || (arrow as any).startNodeId === node.id) {
+                  } else {
                     const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
                     if (snap) { x1 = snap.x; y1 = snap.y; }
                   }
-                  if (((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) && (arrow as any).targetAttach) {
+                }
+                
+                // 更新终点
+                if (endNodeId && movedNodes.has(endNodeId)) {
+                  const movedNode = movedNodes.get(endNodeId);
+                  if ((arrow as any).targetAttach) {
                     const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                     if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                     if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
-                  } else if ((arrow as any).targetNodeId === node.id || (arrow as any).endNodeId === node.id) {
+                  } else {
                     const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
                     if (snap) { x2 = snap.x; y2 = snap.y; }
                   }
-                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
-                });
+                }
+                
+                updateShape(arrow.id, { points: [x1, y1, x2, y2] });
               });
               // 3) 对自由箭头端点做最终同步：两端都在容器内则两端一起移动；仅一端在内则移动该端
-              const cx = (container.x || 0), cy = (container.y || 0), cw = (container.width || 0), ch = (container.height || 0);
-              const arrows = shapes.filter(s => s.type === 'arrow') as any[];
-              arrows.forEach(arrow => {
+              // 跳过已经在步骤2中更新过的箭头（两端都连接到容器内节点的箭头）
+              const oldCx = (container.x || 0), oldCy = (container.y || 0);
+              const cw = (container.width || 0), ch = (container.height || 0);
+              const allArrows = shapes.filter(s => s.type === 'arrow') as any[];
+              const updatedArrowIds = new Set(arrowsToUpdate.keys());
+              
+              allArrows.forEach(arrow => {
+                // 如果箭头已经在步骤2中更新过，跳过
+                if (updatedArrowIds.has(arrow.id)) {
+                  return;
+                }
+                
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
-                const startAttached = !!(arrow.sourceNodeId || arrow.startNodeId);
-                const endAttached = !!(arrow.targetNodeId || arrow.endNodeId);
-                const startInside = x1 >= cx && x1 <= cx + cw && y1 >= cy && y1 <= cy + ch;
-                const endInside = x2 >= cx && x2 <= cx + cw && y2 >= cy && y2 <= cy + ch;
+                const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
+                const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+                
+                // 检查起点连接的节点是否在容器内
+                const sourceNodeInContainer = startNodeId ? (() => {
+                  const sourceNode = shapes.find(s => s.id === startNodeId);
+                  return sourceNode && (sourceNode as any).parentContainerId === containerId;
+                })() : false;
+                
+                // 检查终点连接的节点是否在容器内
+                const targetNodeInContainer = endNodeId ? (() => {
+                  const targetNode = shapes.find(s => s.id === endNodeId);
+                  return targetNode && (targetNode as any).parentContainerId === containerId;
+                })() : false;
+                
+                // 使用旧的容器位置来检查端点是否在容器内（因为箭头端点还是旧坐标）
+                const startInside = x1 >= oldCx && x1 <= oldCx + cw && y1 >= oldCy && y1 <= oldCy + ch;
+                const endInside = x2 >= oldCx && x2 <= oldCx + cw && y2 >= oldCy && y2 <= oldCy + ch;
+                
                 let moved = false;
-                if (!startAttached && startInside) { x1 = x1 + dx; y1 = y1 + dy; moved = true; }
-                if (!endAttached && endInside) { x2 = x2 + dx; y2 = y2 + dy; moved = true; }
+                // 如果起点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
+                if (startInside && !sourceNodeInContainer) {
+                  x1 = x1 + dx;
+                  y1 = y1 + dy;
+                  moved = true;
+                }
+                
+                // 如果终点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
+                if (endInside && !targetNodeInContainer) {
+                  x2 = x2 + dx;
+                  y2 = y2 + dy;
+                  moved = true;
+                }
+                
                 if (moved) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
                 }
@@ -816,43 +990,164 @@ export const Canvas: React.FC = () => {
             [...nodesById.keys()].map(id => [id, arrowsNow.filter(a => (a as any).sourceNodeId === id || (a as any).startNodeId === id)])
           );
 
-          // 获取节点的输出数据（完整数据对象，不只是keys）
+          // 解析 API 返回结果，转换为对象结构（类似 Spring Boot 的 @ResponseBody）
+          const parseApiResult = (apiResult: any): Record<string, any> => {
+            if (!apiResult) return {};
+            // 如果是对象，直接使用
+            if (typeof apiResult === 'object' && !Array.isArray(apiResult)) {
+              return apiResult;
+            }
+            // 如果是数组，提取第一个元素作为主要数据（常见场景：API 返回 [{...}]）
+            if (Array.isArray(apiResult)) {
+              return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
+            }
+            // 如果是字符串，尝试解析 JSON
+            if (typeof apiResult === 'string') {
+              try {
+                const parsed = JSON.parse(apiResult);
+                return parseApiResult(parsed); // 递归处理解析后的结果
+              } catch {
+                return { value: apiResult };
+              }
+            }
+            // 其他类型，包装成对象
+            return { value: apiResult };
+          };
+
+          // 获取节点的输出数据（类似 Spring Boot 的返回对象）
           const getOutputData = (node: any): Record<string, any> => {
             const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
+            
             if (mode === 'props') {
-              // props模式：从outputProps构建数据对象
+              // Props 模式：从 outputProps 和 outputData 构建数据对象
+              // 类似 Spring Boot 的 @ResponseBody，返回的是键值对
               const props = (node.outputProps || []).filter((k: string) => !!k);
               const data: Record<string, any> = {};
               props.forEach((prop: string) => {
-                // 假设属性名就是key，值可以从outputData中获取或使用默认值
-                const existing = node.outputData && node.outputData[prop];
-                data[prop] = existing !== undefined ? existing : null;
+                // 优先从 outputData 中获取值
+                if (node.outputData && node.outputData[prop] !== undefined) {
+                  data[prop] = node.outputData[prop];
+                }
               });
               return data;
             }
-            // custom或api模式：直接使用outputData
+            
+            if (mode === 'api') {
+              // API 模式：解析 API 返回结果
+              const apiResult = node.outputData?.apiResult;
+              if (apiResult) {
+                return parseApiResult(apiResult);
+              }
+              return {};
+            }
+            
+            // Custom 模式：直接使用 outputData
             const data = node.outputData;
-            if (mode === 'api' && data && data.apiResult) {
-              return typeof data.apiResult === 'object' ? data.apiResult : { apiResult: data.apiResult };
+            return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+          };
+
+          // 递归检查嵌套对象结构是否匹配（类似 Spring Boot 的 @RequestBody 验证）
+          const checkStructureMatch = (source: any, target: any, path: string = ''): { match: boolean; missing: string[] } => {
+            const missing: string[] = [];
+            
+            // 如果目标不是对象，跳过结构检查（允许任意类型）
+            if (!target || typeof target !== 'object' || Array.isArray(target)) {
+              return { match: true, missing: [] };
             }
-            return data && typeof data === 'object' ? data : {};
+            
+            // 如果源不是对象，不匹配
+            if (!source || typeof source !== 'object' || Array.isArray(source)) {
+              return { match: false, missing: [path || 'root'] };
+            }
+            
+            // 递归检查每个键
+            for (const key in target) {
+              const fullPath = path ? `${path}.${key}` : key;
+              const targetValue = target[key];
+              const sourceValue = source[key];
+              
+              // 如果目标值也是对象，递归检查
+              if (targetValue && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+                const nested = checkStructureMatch(sourceValue || {}, targetValue, fullPath);
+                if (!nested.match) {
+                  missing.push(...nested.missing);
+                }
+              } else {
+                // 叶子节点：检查源数据是否有这个键
+                if (sourceValue === undefined) {
+                  missing.push(fullPath);
+                }
+              }
+            }
+            
+            return { match: missing.length === 0, missing };
           };
 
-          // 获取节点的输出keys（用于验证）
-          const getOutputKeys = (node: any): string[] => {
-            const data = getOutputData(node);
-            return Object.keys(data).filter(k => data[k] !== undefined && data[k] !== null);
-          };
-
-          // 获取目标节点需要的输入keys
-          const getInputKeys = (node: any): string[] => {
-            const mode = node.inputMode || (node.inputDataEnabled ? 'custom' : 'props');
+          // 验证数据匹配（类似 Spring Boot 的参数绑定验证）
+          const validateDataMatch = (sourceData: Record<string, any>, targetNode: any, sourceNode: any): { match: boolean; missing: string[]; message: string } => {
+            const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+            
             if (mode === 'props') {
-              return (node.inputProps || []).filter((k: string) => !!k);
+              // Props 模式：类似 @RequestParam，基于属性名的精确匹配
+              // 只验证属性名是否匹配，不验证值是否存在
+              const requiredProps = (targetNode.inputProps || []).filter((k: string) => !!k);
+              
+              // 获取源节点的输出属性列表（属性名列表）
+              const sourceOutputMode = sourceNode.outputMode || (sourceNode.outputDataEnabled ? 'custom' : (sourceNode.apiUseAsOutput ? 'api' : 'props'));
+              let sourceOutputProps: string[] = [];
+              
+              if (sourceOutputMode === 'props') {
+                // Props 模式：直接从 outputProps 获取属性名列表
+                sourceOutputProps = (sourceNode.outputProps || []).filter((k: string) => !!k);
+              } else if (sourceOutputMode === 'api') {
+                // API 模式：从解析后的数据中获取属性名
+                sourceOutputProps = Object.keys(sourceData).filter(k => k !== '_array');
+              } else {
+                // Custom 模式：从数据对象中获取属性名
+                sourceOutputProps = Object.keys(sourceData);
+              }
+              
+              const sourcePropsSet = new Set(sourceOutputProps);
+              const missing = requiredProps.filter(prop => !sourcePropsSet.has(prop));
+              
+              if (missing.length === 0) {
+                return { match: true, missing: [], message: '参数匹配成功' };
+              }
+              return { 
+                match: false, 
+                missing, 
+                message: `缺少必需参数: ${missing.join(', ')}` 
+              };
             }
-            // custom模式：如果已经有inputData，使用其keys，否则返回空（允许任意输入）
-            const data = node.inputData;
-            if (data && typeof data === 'object') return Object.keys(data);
+            
+            // Custom 模式：类似 @RequestBody，递归检查对象结构
+            const expectedStructure = targetNode.inputData;
+            if (expectedStructure && typeof expectedStructure === 'object' && !Array.isArray(expectedStructure)) {
+              const result = checkStructureMatch(sourceData, expectedStructure);
+              return {
+                match: result.match,
+                missing: result.missing,
+                message: result.match 
+                  ? '数据结构匹配成功' 
+                  : `缺少必需字段: ${result.missing.join(', ')}`
+              };
+            }
+            
+            // 如果没有定义输入结构，允许任意输入
+            return { match: true, missing: [], message: '允许任意输入' };
+          };
+
+          // 从数据对象中提取属性名
+          const extractProperties = (data: any): string[] => {
+            if (!data) return [];
+            // 如果是对象，提取所有键
+            if (typeof data === 'object' && !Array.isArray(data)) {
+              return Object.keys(data).filter(k => k !== '_array'); // 排除内部数组标记
+            }
+            // 如果是数组，提取第一个元素的键
+            if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
+              return Object.keys(data[0]);
+            }
             return [];
           };
 
@@ -872,6 +1167,19 @@ export const Canvas: React.FC = () => {
               const newOutput = { ...(node.outputData || {}), apiResult: data };
               updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
               node.outputData = newOutput;
+              
+              // 如果使用 API 作为输出，并且是 props 模式，自动提取属性名
+              if (mode === 'api' || mode === 'props') {
+                const parsedData = parseApiResult(data);
+                const properties = extractProperties(parsedData);
+                if (properties.length > 0) {
+                  // 提取属性名并更新 outputProps（只添加新的属性，保留已有的）
+                  const existingProps = (node.outputProps || []).filter(p => !!p);
+                  const newProps = [...new Set([...existingProps, ...properties])]; // 去重合并
+                  updateShape(node.id, { outputProps: newProps });
+                  node.outputProps = newProps;
+                }
+              }
             } catch (e) {
               const newOutput = { ...(node.outputData || {}), apiError: String(e) };
               updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
@@ -879,14 +1187,16 @@ export const Canvas: React.FC = () => {
             }
           };
 
-          // 传递数据到目标节点
+          // 传递数据到目标节点（类似 Spring Boot 的参数绑定）
           const passDataToTarget = (sourceData: Record<string, any>, targetNode: any) => {
             const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+            
             if (mode === 'props') {
-              // props模式：根据inputProps构建inputData
+              // Props 模式：类似 @RequestParam，按属性名精确绑定
               const inputProps = (targetNode.inputProps || []).filter((k: string) => !!k);
               const newInputData: Record<string, any> = {};
               inputProps.forEach((prop: string) => {
+                // 自动绑定：如果源数据有对应属性，就传递；否则传递 undefined（用户可以在节点内设置默认值）
                 if (sourceData[prop] !== undefined) {
                   newInputData[prop] = sourceData[prop];
                 }
@@ -894,19 +1204,60 @@ export const Canvas: React.FC = () => {
               updateShape(targetNode.id, { inputData: newInputData });
               targetNode.inputData = newInputData;
             } else {
-              // custom模式：直接传递所有输出数据
-              updateShape(targetNode.id, { inputData: { ...sourceData } });
-              targetNode.inputData = { ...sourceData };
+              // Custom 模式：类似 @RequestBody，传递完整对象
+              // 如果目标定义了期望结构，只传递匹配的部分；否则传递全部
+              const expectedStructure = targetNode.inputData;
+              if (expectedStructure && typeof expectedStructure === 'object' && !Array.isArray(expectedStructure)) {
+                // 只传递期望结构中定义的字段（保持嵌套结构）
+                const extractMatchingFields = (source: any, target: any): any => {
+                  if (!target || typeof target !== 'object' || Array.isArray(target)) {
+                    return source; // 如果目标不是对象，返回源数据
+                  }
+                  const result: Record<string, any> = {};
+                  for (const key in target) {
+                    if (source && source[key] !== undefined) {
+                      const targetValue = target[key];
+                      if (targetValue && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+                        // 嵌套对象，递归提取
+                        result[key] = extractMatchingFields(source[key], targetValue);
+                      } else {
+                        // 叶子节点，直接赋值
+                        result[key] = source[key];
+                      }
+                    }
+                  }
+                  return result;
+                };
+                const matchedData = extractMatchingFields(sourceData, expectedStructure);
+                updateShape(targetNode.id, { inputData: matchedData });
+                targetNode.inputData = matchedData;
+              } else {
+                // 没有期望结构，传递全部数据
+                updateShape(targetNode.id, { inputData: { ...sourceData } });
+                targetNode.inputData = { ...sourceData };
+              }
             }
           };
 
-          // 从起点开始遍历
+          // 等待箭头动画完成的辅助函数
+          const waitForArrowAnimation = (arrowId: string, status: 'success' | 'error'): Promise<void> => {
+            return new Promise((resolve) => {
+              updateShape(arrowId, { validationStatus: status });
+              // 等待动画完成（300ms）
+              setTimeout(() => {
+                resolve();
+              }, 300);
+            });
+          };
+
+          // 从起点开始遍历（顺序执行，等待每个箭头动画完成）
           const starts = shapesNow.filter(s => s.type === 'start');
           for (const start of starts) {
-            const queue: string[] = [start.id];
+            const queue: Array<{ nodeId: string; sourceNode?: any }> = [{ nodeId: start.id }];
             const visited = new Set<string>();
+            
             while (queue.length) {
-              const currentId = queue.shift()!;
+              const { nodeId: currentId } = queue.shift()!;
               if (visited.has(currentId)) continue;
               visited.add(currentId);
               const currentNode = nodesById.get(currentId);
@@ -917,42 +1268,40 @@ export const Canvas: React.FC = () => {
 
               // 获取源节点的输出数据
               const sourceOutputData = getOutputData(currentNode);
-              const sourceOutputKeys = getOutputKeys(currentNode);
 
-              // 处理所有从当前节点出发的箭头
+              // 处理所有从当前节点出发的箭头（按顺序，等待每个动画完成）
               const outs = outgoing.get(currentId) || [];
               for (const arr of outs) {
                 const arrowId = arr.id;
                 const targetId = (arr as any).targetNodeId || (arr as any).endNodeId;
                 if (!targetId) {
-                  // 箭头未连接到目标，标记为错误
-                  updateShape(arrowId, { validationStatus: 'error' });
+                  // 箭头未连接到目标，标记为错误并等待动画
+                  await waitForArrowAnimation(arrowId, 'error');
                   continue;
                 }
 
                 const targetNode = nodesById.get(targetId);
                 if (!targetNode) {
-                  updateShape(arrowId, { validationStatus: 'error' });
+                  await waitForArrowAnimation(arrowId, 'error');
                   continue;
                 }
 
                 // 标记箭头为验证中
                 updateShape(arrowId, { validationStatus: 'pending' });
 
-                // 验证：目标输入 ⊆ 源输出
-                const requiredInputKeys = getInputKeys(targetNode);
-                const missingKeys = requiredInputKeys.filter(k => !sourceOutputKeys.includes(k));
+                // 验证数据匹配（类似 Spring Boot 的参数绑定验证）
+                const validation = validateDataMatch(sourceOutputData, targetNode, currentNode);
 
-                if (missingKeys.length === 0) {
-                  // 验证成功：箭头变绿，传递数据，继续到目标节点
-                  updateShape(arrowId, { validationStatus: 'success' });
+                if (validation.match) {
+                  // 验证成功：箭头变绿，传递数据，等待动画完成后再继续
+                  await waitForArrowAnimation(arrowId, 'success');
                   passDataToTarget(sourceOutputData, targetNode);
-                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ✅ 验证成功`);
-                  queue.push(targetId);
+                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ✅ ${validation.message}`);
+                  queue.push({ nodeId: targetId });
                 } else {
-                  // 验证失败：箭头变红，停止该路径
-                  updateShape(arrowId, { validationStatus: 'error' });
-                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ❌ 输入缺失`, missingKeys);
+                  // 验证失败：箭头变红，等待动画完成
+                  await waitForArrowAnimation(arrowId, 'error');
+                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ❌ ${validation.message}`, validation.missing);
                 }
               }
             }

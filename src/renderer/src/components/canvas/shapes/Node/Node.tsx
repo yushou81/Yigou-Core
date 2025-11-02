@@ -122,90 +122,206 @@ export const Node: React.FC<NodeProps> = ({
     }
   };
 
-  // 渲染输入属性
+  // 解析 API 返回结果（与验证逻辑一致）
+  const parseApiResult = (apiResult: any): Record<string, any> => {
+    if (!apiResult) return {};
+    if (typeof apiResult === 'object' && !Array.isArray(apiResult)) {
+      return apiResult;
+    }
+    if (Array.isArray(apiResult)) {
+      return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
+    }
+    if (typeof apiResult === 'string') {
+      try {
+        const parsed = JSON.parse(apiResult);
+        return parseApiResult(parsed);
+      } catch {
+        return { value: apiResult };
+      }
+    }
+    return { value: apiResult };
+  };
+
+  // 获取输入数据（与验证逻辑一致）
+  const getInputData = (): Record<string, any> => {
+    const mode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
+    if (mode === 'props') {
+      const props = (data.inputProps || []).filter((k: string) => !!k);
+      const inputData: Record<string, any> = {};
+      props.forEach((prop: string) => {
+        if (data.inputData && data.inputData[prop] !== undefined) {
+          inputData[prop] = data.inputData[prop];
+        }
+      });
+      return inputData;
+    }
+    return data.inputData && typeof data.inputData === 'object' && !Array.isArray(data.inputData) ? data.inputData : {};
+  };
+
+  // 获取输出数据（与验证逻辑一致）
+  const getOutputData = (): Record<string, any> => {
+    const mode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
+    if (mode === 'props') {
+      const props = (data.outputProps || []).filter((k: string) => !!k);
+      const outputData: Record<string, any> = {};
+      props.forEach((prop: string) => {
+        if (data.outputData && data.outputData[prop] !== undefined) {
+          outputData[prop] = data.outputData[prop];
+        }
+      });
+      return outputData;
+    }
+    if (mode === 'api') {
+      const apiResult = data.outputData?.apiResult;
+      if (apiResult) {
+        return parseApiResult(apiResult);
+      }
+      return {};
+    }
+    return data.outputData && typeof data.outputData === 'object' && !Array.isArray(data.outputData) ? data.outputData : {};
+  };
+
+  // 格式化值的显示
+  const formatValue = (value: any): string => {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'object') {
+      try {
+        const str = JSON.stringify(value);
+        return str.length > 20 ? str.slice(0, 20) + '...' : str;
+      } catch {
+        return '[Object]';
+      }
+    }
+    return String(value);
+  };
+
+  // 渲染输入属性（显示实际数据）
   const renderInputProps = () => {
     const inputMode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
-    if (inputMode === 'custom') return null; // 启用自定义输入时，临时取消原输入列表展示
+    if (inputMode === 'custom') {
+      // Custom 模式：显示 JSON
+      const inputData = getInputData();
+      if (!inputData || Object.keys(inputData).length === 0) return null;
+      const headerY = titleHeight + 4;
+      const jsonStr = JSON.stringify(inputData, null, 2);
+      const lines = jsonStr.split('\n').slice(0, 5); // 最多显示5行
+      return (
+        <>
+          <Text x={10} y={headerY} text={"输入(自定义)"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
+          {lines.map((line, index) => (
+            <Text
+              key={`input-custom-${index}`}
+              x={10}
+              y={headerY + propHeight + index * propHeight}
+              text={line.length > 30 ? line.slice(0, 30) + '...' : line}
+              fontSize={11}
+              fill="#666"
+              width={width - 20}
+              align="left"
+              listening={false}
+            />
+          ))}
+        </>
+      );
+    }
+    // Props 模式：显示 属性名: 值
     if (!data.inputProps || data.inputProps.length === 0) return null;
+    const inputData = getInputData();
     const headerY = titleHeight + 4;
     const listStartY = titleHeight + propHeight;
     return (
       <>
-        <Text
-          x={10}
-          y={headerY}
-          text={"输入"}
-          fontSize={12}
-          fontStyle="bold"
-          fill="#333"
-          listening={false}
-        />
-        {data.inputProps.map((prop, index) => (
-          <Text
-            key={`input-${index}`}
-            x={10}
-            y={listStartY + index * propHeight}
-            text={prop}
-            fontSize={12}
-            fill="#666"
-            width={width - 20}
-            align="left"
-            listening={false}
-          />
-        ))}
+        <Text x={10} y={headerY} text={"输入"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
+        {data.inputProps.map((prop, index) => {
+          const value = inputData[prop];
+          const displayText = value !== undefined ? `${prop}: ${formatValue(value)}` : prop;
+          return (
+            <Text
+              key={`input-${index}`}
+              x={10}
+              y={listStartY + index * propHeight}
+              text={displayText}
+              fontSize={11}
+              fill={value !== undefined ? "#333" : "#999"}
+              width={width - 20}
+              align="left"
+              listening={false}
+            />
+          );
+        })}
       </>
     );
   };
 
-  // 渲染输出属性
+  // 渲染输出属性（显示实际数据）
   const renderOutputProps = () => {
     const outputMode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
-    if (outputMode !== 'props') return null;
-    if (!data.outputProps || data.outputProps.length === 0) return null;
-    const hasInputs = (data.inputProps && data.inputProps.length > 0);
-    const baseY = titleHeight + (hasInputs ? (data.inputProps!.length + 1) * propHeight : 0);
+    const inputMode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
+    
+    // 计算基础 Y 位置
+    const inputHeight = (() => {
+      if (inputMode === 'custom') {
+        const inputData = getInputData();
+        return inputData && Object.keys(inputData).length > 0 ? 6 * propHeight : 0;
+      }
+      return (data.inputProps && data.inputProps.length > 0) ? (data.inputProps.length + 1) * propHeight : 0;
+    })();
+    const baseY = titleHeight + inputHeight;
+    
+    if (outputMode === 'props') {
+      // Props 模式：显示 属性名: 值
+      if (!data.outputProps || data.outputProps.length === 0) return null;
+      const outputData = getOutputData();
+      const headerY = baseY + 4;
+      const listStartY = baseY + propHeight;
+      return (
+        <>
+          <Text x={10} y={headerY} text={"输出"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
+          {data.outputProps.map((prop, index) => {
+            const value = outputData[prop];
+            const displayText = value !== undefined ? `${prop}: ${formatValue(value)}` : prop;
+            return (
+              <Text
+                key={`output-${index}`}
+                x={10}
+                y={listStartY + index * propHeight}
+                text={displayText}
+                fontSize={11}
+                fill={value !== undefined ? "#333" : "#999"}
+                width={width - 20}
+                align="left"
+                listening={false}
+              />
+            );
+          })}
+        </>
+      );
+    }
+    
+    // Custom 或 API 模式：显示 JSON
+    const outputData = getOutputData();
+    if (!outputData || Object.keys(outputData).length === 0) return null;
     const headerY = baseY + 4;
-    const listStartY = baseY + propHeight;
-    return (
-      <>
-        <Text
-          x={10}
-          y={headerY}
-          text={"输出"}
-          fontSize={12}
-          fontStyle="bold"
-          fill="#333"
-          listening={false}
-        />
-        {data.outputProps.map((prop, index) => (
-          <Text
-            key={`output-${index}`}
-            x={10}
-            y={listStartY + index * propHeight}
-            text={prop}
-            fontSize={12}
-            fill="#666"
-            width={width - 20}
-            align="left"
-            listening={false}
-          />
-        ))}
-      </>
-    );
-  };
-
-  const renderCustomOutputPreview = () => {
-    const outputMode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
-    if (outputMode === 'props') return null;
-    const headerY = titleHeight + (data.inputProps && (data.inputMode || (data.inputDataEnabled ? 'custom' : 'props')) === 'props' ? (data.inputProps.length + 1) * propHeight : 0) + 4;
     const label = outputMode === 'api' ? '输出(API)' : '输出(自定义)';
-    const preview = data.outputData ? JSON.stringify(data.outputData).slice(0, 50) : '';
+    const jsonStr = JSON.stringify(outputData, null, 2);
+    const lines = jsonStr.split('\n').slice(0, 5); // 最多显示5行
     return (
       <>
         <Text x={10} y={headerY} text={label} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
-        {preview && (
-          <Text x={10} y={headerY + propHeight} text={preview} fontSize={12} fill="#666" width={width - 20} align="left" listening={false} />
-        )}
+        {lines.map((line, index) => (
+          <Text
+            key={`output-custom-${index}`}
+            x={10}
+            y={headerY + propHeight + index * propHeight}
+            text={line.length > 30 ? line.slice(0, 30) + '...' : line}
+            fontSize={11}
+            fill="#666"
+            width={width - 20}
+            align="left"
+            listening={false}
+          />
+        ))}
       </>
     );
   };
@@ -294,7 +410,6 @@ export const Node: React.FC<NodeProps> = ({
       
       {/* 输出属性 */}
       {renderOutputProps()}
-      {renderCustomOutputPreview()}
       
       {/* 连接点 */}
       {renderConnectionPoints()}

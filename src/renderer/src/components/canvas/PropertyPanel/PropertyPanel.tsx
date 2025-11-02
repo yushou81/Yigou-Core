@@ -86,6 +86,93 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     forceRerender(x => x + 1);
   };
 
+  // 解析 API 返回结果（与验证逻辑一致）
+  const parseApiResult = (apiResult: any): Record<string, any> => {
+    if (!apiResult) return {};
+    if (typeof apiResult === 'object' && !Array.isArray(apiResult)) {
+      return apiResult;
+    }
+    if (Array.isArray(apiResult)) {
+      return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
+    }
+    if (typeof apiResult === 'string') {
+      try {
+        const parsed = JSON.parse(apiResult);
+        return parseApiResult(parsed);
+      } catch {
+        return { value: apiResult };
+      }
+    }
+    return { value: apiResult };
+  };
+
+  // 获取输入数据（与验证逻辑一致）
+  const getInputData = (): Record<string, any> => {
+    const mode = shape.inputMode || (shape.inputDataEnabled ? 'custom' : 'props');
+    if (mode === 'props') {
+      const props = (shape.inputProps || []).filter((k: string) => !!k);
+      const inputData: Record<string, any> = {};
+      props.forEach((prop: string) => {
+        if (shape.inputData && shape.inputData[prop] !== undefined) {
+          inputData[prop] = shape.inputData[prop];
+        }
+      });
+      return inputData;
+    }
+    return shape.inputData && typeof shape.inputData === 'object' && !Array.isArray(shape.inputData) ? shape.inputData : {};
+  };
+
+  // 获取输出数据（与验证逻辑一致）
+  const getOutputData = (): Record<string, any> => {
+    const mode = shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'));
+    if (mode === 'props') {
+      const props = (shape.outputProps || []).filter((k: string) => !!k);
+      const outputData: Record<string, any> = {};
+      props.forEach((prop: string) => {
+        if (shape.outputData && shape.outputData[prop] !== undefined) {
+          outputData[prop] = shape.outputData[prop];
+        }
+      });
+      return outputData;
+    }
+    if (mode === 'api') {
+      const apiResult = shape.outputData?.apiResult;
+      if (apiResult) {
+        return parseApiResult(apiResult);
+      }
+      return {};
+    }
+    return shape.outputData && typeof shape.outputData === 'object' && !Array.isArray(shape.outputData) ? shape.outputData : {};
+  };
+
+  // 格式化值的显示
+  const formatValue = (value: any): string => {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '[Object]';
+      }
+    }
+    return String(value);
+  };
+
+  // 从数据对象中提取属性名
+  const extractProperties = (data: any): string[] => {
+    if (!data) return [];
+    // 如果是对象，提取所有键
+    if (typeof data === 'object' && !Array.isArray(data)) {
+      return Object.keys(data).filter(k => k !== '_array'); // 排除内部数组标记
+    }
+    // 如果是数组，提取第一个元素的键
+    if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
+      return Object.keys(data[0]);
+    }
+    return [];
+  };
+
   const runApi = async () => {
     if (!shape || !shape.apiEnabled || !shape.apiUrl) return;
     try {
@@ -102,6 +189,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       shape.lastRunAt = Date.now();
       if (shape.apiUseAsOutput) {
         shape.outputData = { ...(shape.outputData || {}), apiResult: data };
+        
+        // 如果使用 API 作为输出，并且是 props 模式，自动提取属性名
+        const outputMode = shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'));
+        if (outputMode === 'props' || outputMode === 'api') {
+          const parsedData = parseApiResult(data);
+          const properties = extractProperties(parsedData);
+          if (properties.length > 0) {
+            // 提取属性名并更新 outputProps（只添加新的属性，保留已有的）
+            const existingProps = (shape.outputProps || []).filter(p => !!p);
+            const newProps = [...new Set([...existingProps, ...properties])]; // 去重合并
+            updateShape(shape.id, { outputProps: newProps });
+          }
+        }
       }
     } catch (e) {
       shape.outputData = { ...(shape.outputData || {}), apiError: String(e) };
@@ -128,12 +228,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           <div className={styles.propertyList}>
             {shape.inputProps.map((prop, index) => (
               <div key={`input-${index}`} className={styles.propertyItem}>
-                <span className={styles.propertyLabel}>{`输入${index+1}`}:</span>
+                <span className={styles.propertyLabel}>{`输入${index+1}:`}</span>
                 <input 
                   type="text" 
                   value={prop}
                   onChange={(e) => handleInputChange('inputProps', index, e.target.value)}
                   className={styles.propertyInput}
+                  placeholder="属性名"
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('inputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -359,12 +460,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           <div className={styles.propertyList}>
             {shape.outputProps.map((prop, index) => (
               <div key={`output-${index}`} className={styles.propertyItem}>
-                <span className={styles.propertyLabel}>{`输出${index+1}`}:</span>
+                <span className={styles.propertyLabel}>{`输出${index+1}:`}</span>
                 <input 
                   type="text" 
                   value={prop}
                   onChange={(e) => handleInputChange('outputProps', index, e.target.value)}
                   className={styles.propertyInput}
+                  placeholder="属性名"
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
