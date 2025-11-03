@@ -102,6 +102,34 @@ app.whenReady().then(() => {
     }
   })
 
+  // 覆盖保存到指定路径（无对话框）
+  ipcMain.handle('save-project-to-path', async (_event, args: { path: string; data: string }) => {
+    try {
+      if (!args || !args.path) {
+        return { success: false, message: '无效的文件路径' }
+      }
+      await fs.writeFile(args.path, args.data, 'utf-8')
+      return { success: true, filePath: args.path }
+    } catch (error) {
+      console.error('覆盖保存失败:', error)
+      return { success: false, message: `覆盖保存失败: ${error}` }
+    }
+  })
+
+  // 从指定路径加载项目（无对话框）
+  ipcMain.handle('load-project-from-path', async (_event, filePath: string) => {
+    try {
+      if (!filePath) {
+        return { success: false, message: '无效的文件路径' }
+      }
+      const data = await fs.readFile(filePath, 'utf-8')
+      return { success: true, data, filePath }
+    } catch (error) {
+      console.error('从路径加载失败:', error)
+      return { success: false, message: `加载失败: ${error}` }
+    }
+  })
+
   createWindow()
 
   app.on('activate', function () {

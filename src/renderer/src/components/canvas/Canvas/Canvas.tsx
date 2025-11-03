@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Stage, Layer, Group, Circle, Rect, Line } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { useCanvas } from '../../../hooks/useCanvas';
 import { Toolbar } from '../Toolbar';
+import { CanvasAppBar } from '../AppBar';
 import { Arrow } from '../shapes/Arrow';
 import { Container } from '../components/Container';
 import { Node } from '../shapes/Node';
@@ -20,11 +22,13 @@ import styles from './Canvas.module.css';
  * 主画布组件
  */
 export const Canvas: React.FC = () => {
+  const navigate = useNavigate();
   const stageRef = useRef<any>(null);
   const [stageSize, setStageSize] = React.useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
+  const [toast, setToast] = React.useState<string | null>(null);
   const [selectedShapeForProperties, setSelectedShapeForProperties] = React.useState<any>(null);
   const [dragPreview, setDragPreview] = React.useState<{shapeType: string, x: number, y: number} | null>(null);
   const [isPanning, setIsPanning] = React.useState(false);
@@ -98,6 +102,24 @@ export const Canvas: React.FC = () => {
           e.preventDefault();
           panRef.current.isSpacePressed = true;
           break;
+        case 'KeyS': {
+          const isMac = navigator.platform.toUpperCase().includes('MAC');
+          const isSave = (isMac && e.metaKey) || (!isMac && e.ctrlKey);
+          if (isSave) {
+            e.preventDefault();
+            (async () => {
+              const res = await canvasService.saveProjectToFile();
+              if (res.success) {
+                setToast('已保存');
+                setTimeout(() => setToast(null), 1500);
+              } else {
+                setToast(res.message || '保存失败');
+                setTimeout(() => setToast(null), 2000);
+              }
+            })();
+          }
+          break;
+        }
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -1003,10 +1025,18 @@ export const Canvas: React.FC = () => {
 
   return (
     <div className={`${styles.canvasContainer} ${isPanning ? styles.panning : ''}`}>
-      <Toolbar 
-        onDragStart={handleDragStart}
+      <CanvasAppBar
+        onHome={() => navigate('/')}
         onSave={handleSaveProject}
         onLoad={handleLoadProject}
+        onRun={async () => {
+          // 1. 清除箭头状态
+          const arrows = shapes.filter(s => s.type === 'arrow');
+          arrows.forEach(arrow => { updateShape(arrow.id, { validationStatus: null }); });
+        }}
+      />
+      <Toolbar 
+        onDragStart={handleDragStart}
         onRun={async () => {
           // 1. 先清除所有箭头状态
           const arrows = shapes.filter(s => s.type === 'arrow');
@@ -1477,6 +1507,25 @@ export const Canvas: React.FC = () => {
         <PropertyPanel 
           shape={selectedShapeForProperties} 
         />
+      )}
+
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            background: 'rgba(17, 24, 39, 0.9)',
+            color: '#fff',
+            padding: '8px 12px',
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            fontSize: 12,
+          }}
+        >
+          {toast}
+        </div>
       )}
     </div>
   );

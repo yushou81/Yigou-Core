@@ -10,6 +10,14 @@ const api = {
   loadProject: () => {
     console.log('[Preload] loadProject called')
     return ipcRenderer.invoke('load-project')
+  },
+  saveProjectToPath: (path: string, data: string) => {
+    console.log('[Preload] saveProjectToPath called:', path)
+    return ipcRenderer.invoke('save-project-to-path', { path, data })
+  },
+  loadProjectFromPath: (path: string) => {
+    console.log('[Preload] loadProjectFromPath called:', path)
+    return ipcRenderer.invoke('load-project-from-path', path)
   }
 }
 

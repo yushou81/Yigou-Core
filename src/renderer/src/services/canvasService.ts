@@ -6,6 +6,8 @@ import { ShapeData, ShapeType, CameraState, CanvasState } from '../types/canvas'
 export class CanvasService {
   private state: CanvasState;
   private listeners: Set<(state: CanvasState) => void> = new Set();
+  private currentProjectPath: string | null = null;
+  private static RECENTS_KEY = 'yigou_recent_projects';
 
   constructor(initialState?: Partial<CanvasState>) {
     this.state = {
@@ -260,6 +262,25 @@ export class CanvasService {
   }
 
   /**
+   * 设置/获取 当前项目文件路径
+   */
+  setCurrentProjectPath(path: string | null) {
+    this.currentProjectPath = path;
+    if (path) {
+      try {
+        const raw = localStorage.getItem(CanvasService.RECENTS_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        const filtered = Array.isArray(list) ? list.filter((it: any) => it.path !== path) : [];
+        filtered.unshift({ path, openedAt: Date.now() });
+        localStorage.setItem(CanvasService.RECENTS_KEY, JSON.stringify(filtered.slice(0, 50)));
+      } catch {}
+    }
+  }
+  getCurrentProjectPath(): string | null {
+    return this.currentProjectPath;
+  }
+
+  /**
    * 保存项目到文件（通过 Electron IPC）
    */
   async saveProjectToFile(): Promise<{ success: boolean; filePath?: string; message?: string }> {
@@ -285,8 +306,21 @@ export class CanvasService {
       }
       
       const jsonData = this.exportProject();
+
+      // 如果已有文件路径，直接覆盖保存
+      const existingPath = this.getCurrentProjectPath();
+      if (existingPath && typeof window.api.saveProjectToPath === 'function') {
+        console.log('[CanvasService] Overwriting project to:', existingPath);
+        const res = await window.api.saveProjectToPath(existingPath, jsonData);
+        return res;
+      }
+
       console.log('[CanvasService] Calling window.api.saveProject with data length:', jsonData.length);
-      return await window.api.saveProject(jsonData);
+      const res = await window.api.saveProject(jsonData);
+      if (res.success && res.filePath) {
+        this.setCurrentProjectPath(res.filePath);
+      }
+      return res;
     } catch (error) {
       console.error('[CanvasService] 保存项目失败:', error);
       return { success: false, message: `保存失败: ${error}` };
@@ -325,10 +359,37 @@ export class CanvasService {
         return result;
       }
 
-      return this.loadProject(result.data);
+      const loadRes = this.loadProject(result.data);
+      if (loadRes.success) {
+        this.setCurrentProjectPath(result.filePath || null);
+      }
+      return loadRes;
     } catch (error) {
       console.error('[CanvasService] 加载项目失败:', error);
       return { success: false, message: `加载失败: ${error}` };
+    }
+  }
+
+  /**
+   * 直接从指定路径加载项目
+   */
+  async loadProjectFromPath(path: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      if (!window.api || typeof window.api.loadProjectFromPath !== 'function') {
+        return { success: false, message: '文件 API 不可用：loadProjectFromPath 方法不存在' };
+      }
+      const result = await window.api.loadProjectFromPath(path);
+      if (!result.success || !result.data) {
+        return { success: false, message: result.message || '加载失败' };
+      }
+      const loadRes = this.loadProject(result.data);
+      if (loadRes.success) {
+        this.setCurrentProjectPath(result.filePath || path || null);
+      }
+      return loadRes;
+    } catch (error) {
+      console.error('[CanvasService] 从路径加载项目失败:', error);
+      return { success: false, message: `从路径加载失败: ${error}` };
     }
   }
 }
