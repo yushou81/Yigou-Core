@@ -13,6 +13,7 @@ import { screenToWorld, clampCameraScale, findNearestPointOnShapeEdge } from '..
 import { DEFAULT_CANVAS_SETTINGS } from '../../../constants/canvas';
 import { createDefaultShape } from '../../../utils/canvasUtils';
 import { ShapeType } from '../../../types/canvas';
+import { canvasService } from '../../../services/canvasService';
 import styles from './Canvas.module.css';
 
 /**
@@ -485,6 +486,35 @@ export const Canvas: React.FC = () => {
 
   // 实时更新箭头，不做防抖
   const handleArrowPointsUpdate = computeArrowPointsUpdate;
+
+  // 保存项目
+  const handleSaveProject = useCallback(async () => {
+    const result = await canvasService.saveProjectToFile();
+    if (result.success) {
+      alert(`项目已保存到: ${result.filePath}`);
+    } else {
+      alert(`保存失败: ${result.message || '未知错误'}`);
+    }
+  }, []);
+
+  // 加载项目
+  const handleLoadProject = useCallback(async () => {
+    // 确认是否要覆盖当前内容
+    if (shapes.length > 0) {
+      const confirm = window.confirm('加载项目将覆盖当前画布内容，是否继续？');
+      if (!confirm) return;
+    }
+    
+    const result = await canvasService.loadProjectFromFile();
+    if (result.success) {
+      alert('项目加载成功！');
+      // 清空当前选择
+      clearSelection();
+      setSelectedShapeForProperties(null);
+    } else {
+      alert(`加载失败: ${result.message || '未知错误'}`);
+    }
+  }, [shapes.length, clearSelection]);
 
   // 渲染形状组件
   const renderShape = useCallback((shape: any) => {
@@ -975,6 +1005,8 @@ export const Canvas: React.FC = () => {
     <div className={`${styles.canvasContainer} ${isPanning ? styles.panning : ''}`}>
       <Toolbar 
         onDragStart={handleDragStart}
+        onSave={handleSaveProject}
+        onLoad={handleLoadProject}
         onRun={async () => {
           // 1. 先清除所有箭头状态
           const arrows = shapes.filter(s => s.type === 'arrow');

@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
+import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
@@ -51,6 +52,55 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  // 保存项目文件
+  ipcMain.handle('save-project', async (_, data: string) => {
+    try {
+      const result = await dialog.showSaveDialog({
+        title: '保存项目',
+        defaultPath: 'project.json',
+        filters: [
+          { name: 'JSON 文件', extensions: ['json'] },
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      })
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, message: '用户取消保存' }
+      }
+
+      await fs.writeFile(result.filePath, data, 'utf-8')
+      return { success: true, filePath: result.filePath }
+    } catch (error) {
+      console.error('保存项目失败:', error)
+      return { success: false, message: `保存失败: ${error}` }
+    }
+  })
+
+  // 加载项目文件
+  ipcMain.handle('load-project', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: '加载项目',
+        filters: [
+          { name: 'JSON 文件', extensions: ['json'] },
+          { name: '所有文件', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      })
+
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: false, message: '用户取消加载' }
+      }
+
+      const filePath = result.filePaths[0]
+      const data = await fs.readFile(filePath, 'utf-8')
+      return { success: true, data, filePath }
+    } catch (error) {
+      console.error('加载项目失败:', error)
+      return { success: false, message: `加载失败: ${error}` }
+    }
+  })
 
   createWindow()
 
