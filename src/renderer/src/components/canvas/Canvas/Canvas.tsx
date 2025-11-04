@@ -1030,14 +1030,6 @@ export const Canvas: React.FC = () => {
         onSave={handleSaveProject}
         onLoad={handleLoadProject}
         onRun={async () => {
-          // 1. 清除箭头状态
-          const arrows = shapes.filter(s => s.type === 'arrow');
-          arrows.forEach(arrow => { updateShape(arrow.id, { validationStatus: null }); });
-        }}
-      />
-      <Toolbar 
-        onDragStart={handleDragStart}
-        onRun={async () => {
           // 1. 先清除所有箭头状态
           const arrows = shapes.filter(s => s.type === 'arrow');
           arrows.forEach(arrow => {
@@ -1372,6 +1364,9 @@ export const Canvas: React.FC = () => {
             console.warn('未找到起点组件');
           }
         }}
+      />
+      <Toolbar 
+        onDragStart={handleDragStart}
       />
 
       <div

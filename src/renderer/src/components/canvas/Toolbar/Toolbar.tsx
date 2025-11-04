@@ -5,9 +5,6 @@ import styles from './Toolbar.module.css';
 export interface ToolbarProps {
   onDragStart?: (shapeType: ShapeType, event: React.DragEvent) => void;
   className?: string;
-  onRun?: () => void;
-  onSave?: () => void;
-  onLoad?: () => void;
 }
 
 interface ToolbarButtonProps {
@@ -46,9 +43,6 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
 export const Toolbar: React.FC<ToolbarProps> = ({
   onDragStart,
   className,
-  onRun,
-  onSave,
-  onLoad,
 }) => {
   const tools: Array<{
     type: ShapeType;
@@ -102,37 +96,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <div className={`${styles.toolbar} ${className || ''}`}>
       <div className={styles.toolGroup}>
-        <div className={styles.toolButtons}>
-          {onSave && (
-            <button className={styles.toolbarButton} onClick={onSave} aria-label="保存项目" title="保存项目">
-              <span className={styles.icon}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M11 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-3-3z" />
-                  <path d="M11 2v3h3M9 9H7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                </svg>
-              </span>
-            </button>
-          )}
-          {onLoad && (
-            <button className={styles.toolbarButton} onClick={onLoad} aria-label="加载项目" title="加载项目">
-              <span className={styles.icon}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M5 2h6l3 3v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M5 2v3h6M8 8v4M6 10l2-2 2 2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                </svg>
-              </span>
-            </button>
-          )}
-          {onRun && (
-            <button className={styles.toolbarButton} onClick={onRun} aria-label="运行" title="运行">
-              <span className={styles.icon}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M5 3l8 5-8 5V3z" />
-                </svg>
-              </span>
-            </button>
-          )}
-        </div>
         <div className={styles.toolButtons}>
           {tools.map((tool) => (
             <ToolbarButton
