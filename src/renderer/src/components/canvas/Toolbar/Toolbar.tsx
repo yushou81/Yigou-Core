@@ -53,9 +53,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       type: 'start',
       label: '起点',
       icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="4" cy="8" r="2" />
-          <rect x="6" y="3" width="8" height="10" rx="2" />
+        <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor">
+          <path d="M819.6 494.7L224.4 151c-13.3-7.7-30 1.9-30 17.3v687.4c0 15.4 16.7 25 30 17.3l595.3-343.7c13.3-7.7 13.3-26.9-0.1-34.6z" />
         </svg>
       ),
     },

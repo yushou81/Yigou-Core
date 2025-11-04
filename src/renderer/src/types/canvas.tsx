@@ -57,6 +57,12 @@ export interface ShapeData {
   endNodeId?: string; // 结束节点 ID
   startPointId?: string; // 起始连接点 ID
   endPointId?: string; // 结束连接点 ID
+  // 箭头运行顺序（数值越小越先运行）；未设置时按默认顺序
+  order?: number;
+  // 箭头用途/备注（可选）
+  note?: string;
+  // 焦点高亮（例如通过上下切换聚焦时设置，选中时也会高亮）
+  focused?: boolean;
   // 端点与节点边连接的固定位置信息
   sourceAttach?: { side: 'top' | 'bottom' | 'left' | 'right'; ratio: number } | null;
   targetAttach?: { side: 'top' | 'bottom' | 'left' | 'right'; ratio: number } | null;

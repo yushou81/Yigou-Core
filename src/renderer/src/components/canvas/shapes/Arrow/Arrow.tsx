@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { Arrow as KonvaArrow, Group, Circle, Line } from 'react-konva';
+import { Arrow as KonvaArrow, Group, Circle, Line, Text } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { ShapeData } from '../../../../types/canvas';
 
@@ -159,9 +159,17 @@ export const Arrow: React.FC<ArrowProps> = ({
 
   const handleHandleDragMove = (which: 'start' | 'end', e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
-    const abs = (e.target as any).getAbsolutePosition();
-    const nx = abs.x;
-    const ny = abs.y;
+    const target: any = e.target;
+    const stage = target.getStage();
+    const layer = target.getLayer();
+    if (!stage || !layer) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    // 将屏幕指针位置反投影到该层的本地/世界坐标
+    const transform = layer.getAbsoluteTransform().copy().invert();
+    const pos = transform.point(pointer);
+    const nx = pos.x;
+    const ny = pos.y;
 
     const sx = points[0];
     const sy = points[1];
@@ -209,6 +217,11 @@ export const Arrow: React.FC<ArrowProps> = ({
   // 动画进行中的显示：灰色背景 + 前景颜色（逐渐展开）
   const isAnimating = (data.validationStatus === 'success' || data.validationStatus === 'error') && animationProgress < 1;
   const animationColor = data.validationStatus === 'success' ? '#22c55e' : '#ef4444'; // 绿色或红色
+
+  // 几何中心与标签颜色
+  const centerX = (startPoint.x + endPoint.x) / 2;
+  const centerY = (startPoint.y + endPoint.y) / 2;
+  const labelColor = (isSelected || (data as any).focused) ? '#333' : '#aaa';
 
   return (
     <Group
@@ -282,6 +295,20 @@ export const Arrow: React.FC<ArrowProps> = ({
           perfectDrawEnabled={false}
           listening
         />
+      )}
+
+      {/* 箭头用途标签 */}
+      {(data as any).note && (
+        <Group listening={false}>
+          <Text
+            x={centerX}
+            y={centerY - 14}
+            text={(data as any).note}
+            fontSize={12}
+            fill={labelColor}
+            offsetX={((data as any).note as string).length * 6 / 2}
+          />
+        </Group>
       )}
 
       {(isSelected || isHovered) && (

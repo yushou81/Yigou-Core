@@ -460,6 +460,14 @@ export const Canvas: React.FC = () => {
     clearSelection();
     selectShape(shapeId);
     const shape = shapes.find(s => s.id === shapeId);
+    // 如果选中的是箭头，设置 focused 高亮；清理上一个
+    if (shape && shape.type === 'arrow') {
+      if ((window as any).__lastFocusedArrowId && (window as any).__lastFocusedArrowId !== shape.id) {
+        updateShape((window as any).__lastFocusedArrowId, { focused: false } as any);
+      }
+      updateShape(shape.id, { focused: true } as any);
+      (window as any).__lastFocusedArrowId = shape.id;
+    }
     setSelectedShapeForProperties(shape || null);
   }, [clearSelection, selectShape, shapes]);
 
@@ -1029,6 +1037,76 @@ export const Canvas: React.FC = () => {
         onHome={() => navigate('/')}
         onSave={handleSaveProject}
         onLoad={handleLoadProject}
+        onPrev={async () => {
+          const ordered = shapes
+            .filter(s => s.type === 'arrow' && typeof (s as any).order === 'number')
+            .sort((a: any, b: any) => (a.order as number) - (b.order as number));
+          if (ordered.length === 0) return;
+          if (!(window as any).__arrowIdx && (window as any).__arrowIdx !== 0) (window as any).__arrowIdx = 0;
+          (window as any).__arrowIdx = Math.max(0, (window as any).__arrowIdx - 1);
+          const target = ordered[(window as any).__arrowIdx];
+          // 高亮当前，取消上一个
+          if ((window as any).__lastFocusedArrowId && (window as any).__lastFocusedArrowId !== target.id) {
+            updateShape((window as any).__lastFocusedArrowId, { focused: false } as any);
+          }
+          updateShape(target.id, { focused: true } as any);
+          (window as any).__lastFocusedArrowId = target.id;
+          const pts = target.points || [0, 0, 0, 0];
+          const xs = pts.filter((_, i) => i % 2 === 0);
+          const ys = pts.filter((_, i) => i % 2 === 1);
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+          const start = { x: camera.x, y: camera.y, scale: camera.scale };
+          // 使世界坐标(cx, cy) 居中：x = stageW/2 - cx*scale, y = stageH/2 - cy*scale
+          const end = { x: stageSize.width / 2 - cx * camera.scale, y: stageSize.height / 2 - cy * camera.scale, scale: camera.scale };
+          const duration = 400;
+          const begin = performance.now();
+          const animate = (t: number) => {
+            const p = Math.min(1, (t - begin) / duration);
+            const ease = 0.5 - Math.cos(p * Math.PI) / 2;
+            setCamera({
+              x: start.x + (end.x - start.x) * ease,
+              y: start.y + (end.y - start.y) * ease,
+              scale: start.scale + (end.scale - start.scale) * ease,
+            });
+            if (p < 1) requestAnimationFrame(animate);
+          };
+          requestAnimationFrame(animate);
+        }}
+        onNext={async () => {
+          const ordered = shapes
+            .filter(s => s.type === 'arrow' && typeof (s as any).order === 'number')
+            .sort((a: any, b: any) => (a.order as number) - (b.order as number));
+          if (ordered.length === 0) return;
+          if (!(window as any).__arrowIdx && (window as any).__arrowIdx !== 0) (window as any).__arrowIdx = -1;
+          (window as any).__arrowIdx = Math.min(ordered.length - 1, (window as any).__arrowIdx + 1);
+          const target = ordered[(window as any).__arrowIdx];
+          if ((window as any).__lastFocusedArrowId && (window as any).__lastFocusedArrowId !== target.id) {
+            updateShape((window as any).__lastFocusedArrowId, { focused: false } as any);
+          }
+          updateShape(target.id, { focused: true } as any);
+          (window as any).__lastFocusedArrowId = target.id;
+          const pts = target.points || [0, 0, 0, 0];
+          const xs = pts.filter((_, i) => i % 2 === 0);
+          const ys = pts.filter((_, i) => i % 2 === 1);
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+          const start = { x: camera.x, y: camera.y, scale: camera.scale };
+          const end = { x: stageSize.width / 2 - cx * camera.scale, y: stageSize.height / 2 - cy * camera.scale, scale: camera.scale };
+          const duration = 400;
+          const begin = performance.now();
+          const animate = (t: number) => {
+            const p = Math.min(1, (t - begin) / duration);
+            const ease = 0.5 - Math.cos(p * Math.PI) / 2;
+            setCamera({
+              x: start.x + (end.x - start.x) * ease,
+              y: start.y + (end.y - start.y) * ease,
+              scale: start.scale + (end.scale - start.scale) * ease,
+            });
+            if (p < 1) requestAnimationFrame(animate);
+          };
+          requestAnimationFrame(animate);
+        }}
         onRun={async () => {
           // 1. 先清除所有箭头状态
           const arrows = shapes.filter(s => s.type === 'arrow');
@@ -1325,7 +1403,14 @@ export const Canvas: React.FC = () => {
 
               // 处理所有从当前节点出发的箭头（按顺序，等待每个动画完成）
               const outs = outgoing.get(currentId) || [];
-              for (const arr of outs) {
+          // 根据箭头的 order 字段进行排序：数值越小越先运行；未设置的排在最后，保持原有相对顺序
+          const sortedOuts = [...outs].sort((a: any, b: any) => {
+            const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+            const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+            if (ao === bo) return 0;
+            return ao - bo;
+          });
+          for (const arr of sortedOuts) {
                 const arrowId = arr.id;
                 const targetId = (arr as any).targetNodeId || (arr as any).endNodeId;
                 if (!targetId) {

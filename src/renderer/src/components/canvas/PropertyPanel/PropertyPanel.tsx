@@ -31,10 +31,17 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   // 自定义输入/输出文本本地缓冲，避免未成对 JSON 在输入中被强制回退
   const [inputDataText, setInputDataText] = useState<string>(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
   const [outputDataText, setOutputDataText] = useState<string>(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
+  // 箭头用途本地缓冲与合成态
+  const [arrowNoteText, setArrowNoteText] = useState<string>(shape.type === 'arrow' ? ((shape as any).note || '') : '');
+  const [isComposing, setIsComposing] = useState<boolean>(false);
 
   useEffect(() => {
     setInputDataText(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
     setOutputDataText(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
+    // 当选中目标变化时，同步箭头用途的本地值
+    if (shape.type === 'arrow') {
+      setArrowNoteText((shape as any).note || '');
+    }
   }, [shape.id, shape.inputData, shape.outputData]);
 
   const handleInputChange = (path: 'inputProps' | 'outputProps', index: number, value: string) => {
@@ -435,6 +442,55 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           <div className={styles.propertyItem}>
             <span className={styles.propertyLabel}>目标节点:</span>
             <span className={styles.propertyValue}>{shape.targetNode || '未连接'}</span>
+          </div>
+          <div className={styles.propertyItem}>
+            <span className={styles.propertyLabel}>序号:</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={styles.propertyInput}
+              value={shape.order ?? ''}
+              placeholder="可选，数值越小越先运行"
+              onChange={(e) => {
+                const raw = e.target.value;
+                const num = raw === '' ? undefined : Number.parseInt(raw, 10);
+                if (Number.isNaN(num as number)) {
+                  updateShape(shape.id, { order: undefined });
+                } else {
+                  updateShape(shape.id, { order: num });
+                }
+                forceRerender((x) => x + 1);
+              }}
+            />
+          </div>
+          <div className={styles.propertyItem}>
+            <span className={styles.propertyLabel}>用途:</span>
+            <input
+              type="text"
+              className={styles.propertyInput}
+              value={arrowNoteText}
+              placeholder="例如：用户信息传递"
+              onChange={(e) => {
+                const val = e.target.value;
+                setArrowNoteText(val);
+                // 实时更新：仅在非合成态时提交，避免打断中文输入法
+                if (!isComposing) {
+                  updateShape(shape.id, { note: val } as any);
+                }
+              }}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={(e) => {
+                setIsComposing(false);
+                const val = (e.target as HTMLInputElement).value;
+                setArrowNoteText(val);
+                // 合成结束后提交一次，确保中文输入结果保存
+                updateShape(shape.id, { note: val } as any);
+              }}
+              onBlur={() => {
+                if (!isComposing) updateShape(shape.id, { note: arrowNoteText } as any);
+              }}
+            />
           </div>
         </div>
       </div>
