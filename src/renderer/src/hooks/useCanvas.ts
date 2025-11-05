@@ -1,3 +1,10 @@
+// ================================
+// useCanvas：画布状态的订阅与操作封装
+// 
+// - 对外暴露 shapes/camera 等状态（来自 CanvasService 单例）
+// - 暴露 addShape/updateShape/selectShape 等操作方法，内部直接调用 service
+// - 组件通过此 Hook 订阅 service 的变更，保持 UI 与状态同步
+// ================================
 import { useState, useEffect, useCallback } from 'react';
 import { CanvasState, ShapeData, ShapeType, CameraState } from '../types/canvas';
 import { canvasService } from '../services/canvasService';

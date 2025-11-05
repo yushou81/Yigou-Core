@@ -33,6 +33,7 @@ export interface ShapeData {
   parentContainerId?: string | null; // 所属容器ID
   
   // Node 特有属性
+  description?: string; // 节点描述（仅画布渲染该描述，不再渲染输入输出）
   inputProps?: string[]; // 输入属性列表
   inputMode?: 'props' | 'custom'; // 输入渲染模式
   outputProps?: string[]; // 输出属性列表

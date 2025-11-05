@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Rect, Text, Circle, Group } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { ShapeData, ConnectionPoint } from '../../../../types/canvas';
@@ -30,6 +30,7 @@ export const Node: React.FC<NodeProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const initialPosRef = useRef<{ x: number; y: number }>({ x: data.x || 0, y: data.y || 0 });
   
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
     if (isResizing) {
@@ -47,7 +48,7 @@ export const Node: React.FC<NodeProps> = ({
   const width = data.width || 200;
   const height = data.height || 120;
   const titleHeight = 30;
-  const propHeight = 20;
+  // const propHeight = 20; // 已不再使用输入/输出渲染
   const connectionPointRadius = 2; // 更小更简洁
 
   // 计算连接点位置
@@ -142,189 +143,15 @@ export const Node: React.FC<NodeProps> = ({
     return { value: apiResult };
   };
 
-  // 获取输入数据（与验证逻辑一致）
-  const getInputData = (): Record<string, any> => {
-    const mode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
-    if (mode === 'props') {
-      const props = (data.inputProps || []).filter((k: string) => !!k);
-      const inputData: Record<string, any> = {};
-      props.forEach((prop: string) => {
-        if (data.inputData && data.inputData[prop] !== undefined) {
-          inputData[prop] = data.inputData[prop];
-        }
-      });
-      return inputData;
-    }
-    return data.inputData && typeof data.inputData === 'object' && !Array.isArray(data.inputData) ? data.inputData : {};
-  };
+  // 已移除：画布不再显示输入数据
 
-  // 获取输出数据（与验证逻辑一致）
-  const getOutputData = (): Record<string, any> => {
-    const mode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
-    if (mode === 'props') {
-      const props = (data.outputProps || []).filter((k: string) => !!k);
-      const outputData: Record<string, any> = {};
-      props.forEach((prop: string) => {
-        if (data.outputData && data.outputData[prop] !== undefined) {
-          outputData[prop] = data.outputData[prop];
-        }
-      });
-      return outputData;
-    }
-    if (mode === 'api') {
-      const apiResult = data.outputData?.apiResult;
-      if (apiResult) {
-        return parseApiResult(apiResult);
-      }
-      return {};
-    }
-    return data.outputData && typeof data.outputData === 'object' && !Array.isArray(data.outputData) ? data.outputData : {};
-  };
+  // 已移除：画布不再显示输出数据
 
-  // 格式化值的显示
-  const formatValue = (value: any): string => {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'object') {
-      try {
-        const str = JSON.stringify(value);
-        return str.length > 20 ? str.slice(0, 20) + '...' : str;
-      } catch {
-        return '[Object]';
-      }
-    }
-    return String(value);
-  };
+  // 已移除：不再格式化输入/输出值
 
-  // 渲染输入属性（显示实际数据）
-  const renderInputProps = () => {
-    const inputMode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
-    if (inputMode === 'custom') {
-      // Custom 模式：显示 JSON
-      const inputData = getInputData();
-      if (!inputData || Object.keys(inputData).length === 0) return null;
-      const headerY = titleHeight + 4;
-      const jsonStr = JSON.stringify(inputData, null, 2);
-      const lines = jsonStr.split('\n').slice(0, 5); // 最多显示5行
-      return (
-        <>
-          <Text x={10} y={headerY} text={"输入(自定义)"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
-          {lines.map((line, index) => (
-            <Text
-              key={`input-custom-${index}`}
-              x={10}
-              y={headerY + propHeight + index * propHeight}
-              text={line.length > 30 ? line.slice(0, 30) + '...' : line}
-              fontSize={11}
-              fill="#666"
-              width={width - 20}
-              align="left"
-              listening={false}
-            />
-          ))}
-        </>
-      );
-    }
-    // Props 模式：显示 属性名: 值
-    if (!data.inputProps || data.inputProps.length === 0) return null;
-    const inputData = getInputData();
-    const headerY = titleHeight + 4;
-    const listStartY = titleHeight + propHeight;
-    return (
-      <>
-        <Text x={10} y={headerY} text={"输入"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
-        {data.inputProps.map((prop, index) => {
-          const value = inputData[prop];
-          const displayText = value !== undefined ? `${prop}: ${formatValue(value)}` : prop;
-          return (
-            <Text
-              key={`input-${index}`}
-              x={10}
-              y={listStartY + index * propHeight}
-              text={displayText}
-              fontSize={11}
-              fill={value !== undefined ? "#333" : "#999"}
-              width={width - 20}
-              align="left"
-              listening={false}
-            />
-          );
-        })}
-      </>
-    );
-  };
+  // 取消输入属性在画布显示
 
-  // 渲染输出属性（显示实际数据）
-  const renderOutputProps = () => {
-    const outputMode = data.outputMode || (data.outputDataEnabled ? 'custom' : (data.apiUseAsOutput ? 'api' : 'props'));
-    const inputMode = data.inputMode || (data.inputDataEnabled ? 'custom' : 'props');
-    
-    // 计算基础 Y 位置
-    const inputHeight = (() => {
-      if (inputMode === 'custom') {
-        const inputData = getInputData();
-        return inputData && Object.keys(inputData).length > 0 ? 6 * propHeight : 0;
-      }
-      return (data.inputProps && data.inputProps.length > 0) ? (data.inputProps.length + 1) * propHeight : 0;
-    })();
-    const baseY = titleHeight + inputHeight;
-    
-    if (outputMode === 'props') {
-      // Props 模式：显示 属性名: 值
-      if (!data.outputProps || data.outputProps.length === 0) return null;
-      const outputData = getOutputData();
-      const headerY = baseY + 4;
-      const listStartY = baseY + propHeight;
-      return (
-        <>
-          <Text x={10} y={headerY} text={"输出"} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
-          {data.outputProps.map((prop, index) => {
-            const value = outputData[prop];
-            const displayText = value !== undefined ? `${prop}: ${formatValue(value)}` : prop;
-            return (
-              <Text
-                key={`output-${index}`}
-                x={10}
-                y={listStartY + index * propHeight}
-                text={displayText}
-                fontSize={11}
-                fill={value !== undefined ? "#333" : "#999"}
-                width={width - 20}
-                align="left"
-                listening={false}
-              />
-            );
-          })}
-        </>
-      );
-    }
-    
-    // Custom 或 API 模式：显示 JSON
-    const outputData = getOutputData();
-    if (!outputData || Object.keys(outputData).length === 0) return null;
-    const headerY = baseY + 4;
-    const label = outputMode === 'api' ? '输出(API)' : '输出(自定义)';
-    const jsonStr = JSON.stringify(outputData, null, 2);
-    const lines = jsonStr.split('\n').slice(0, 5); // 最多显示5行
-    return (
-      <>
-        <Text x={10} y={headerY} text={label} fontSize={12} fontStyle="bold" fill="#333" listening={false} />
-        {lines.map((line, index) => (
-          <Text
-            key={`output-custom-${index}`}
-            x={10}
-            y={headerY + propHeight + index * propHeight}
-            text={line.length > 30 ? line.slice(0, 30) + '...' : line}
-            fontSize={11}
-            fill="#666"
-            width={width - 20}
-            align="left"
-            listening={false}
-          />
-        ))}
-      </>
-    );
-  };
+  // 取消输出属性在画布显示
 
   // 渲染连接点（只在悬停时显示）
   const renderConnectionPoints = () => {
@@ -405,26 +232,35 @@ export const Node: React.FC<NodeProps> = ({
         listening={false}
       />
       
-      {/* 输入属性 */}
-      {renderInputProps()}
-      
-      {/* 输出属性 */}
-      {renderOutputProps()}
+      {/* 描述内容（仅显示描述，不再渲染输入/输出）*/}
+      {data.description && (
+        <Text
+          x={10}
+          y={titleHeight + 6}
+          text={String(data.description)}
+          fontSize={12}
+          fill="#444"
+          width={width - 20}
+          align="left"
+          listening={false}
+        />
+      )}
       
       {/* 连接点 */}
       {renderConnectionPoints()}
 
-      {/* 右下角拉伸手柄 */}
-      <Rect
-        x={(data.width || width) - 8}
-        y={(data.height || height) - 8}
-        width={10}
-        height={10}
-        cornerRadius={2}
-        fill="#ffffff"
-        stroke="#111"
-        strokeWidth={1}
-        draggable
+      {/* 右下角拉伸手柄 - 只在悬停或选中时显示 */}
+      {(isHovered || isSelected) && (
+        <Rect
+          x={(data.width || width) - 8}
+          y={(data.height || height) - 8}
+          width={10}
+          height={10}
+          cornerRadius={2}
+          fill="#ffffff"
+          stroke="#111"
+          strokeWidth={1}
+          draggable
         onMouseDown={(e) => { e.cancelBubble = true; }}
         onTouchStart={(e) => { e.cancelBubble = true; }}
         onDragStart={(e) => {
@@ -435,6 +271,11 @@ export const Node: React.FC<NodeProps> = ({
           if (parent && typeof parent.draggable === 'function') {
             parent.draggable(false);
           }
+          // 记录开始调整大小时节点的初始位置，避免之后被意外改动
+          try {
+            const group = parent as any;
+            initialPosRef.current = { x: group?.x?.() || data.x || 0, y: group?.y?.() || data.y || 0 };
+          } catch {}
           try {
             const parentAbs = parent?.absolutePosition?.() || { x: 0, y: 0 };
             console.log('[Node] resizeStart', { id: data.id, handleLocal: { x: handle?.x?.(), y: handle?.y?.() }, parentAbs, w: data.width || width, h: data.height || height });
@@ -466,16 +307,28 @@ export const Node: React.FC<NodeProps> = ({
           const newW = Math.max(40, localX + 8);
           const newH = Math.max(40, localY + 8);
           if (onResizeEnd) onResizeEnd(data.id, newW, newH);
+          // 强制恢复节点原始位置，只更新宽高，避免发生移位
+          try {
+            const { x, y } = initialPosRef.current;
+            const group = (handle.getParent && handle.getParent()) as any;
+            if (group && typeof group.position === 'function') {
+              group.position({ x, y });
+            }
+          } catch {}
           const parent = handle.getParent();
           if (parent && typeof parent.draggable === 'function') {
             parent.draggable(true);
           }
-          setIsResizing(false);
+          // 阻止冒泡，避免 Group 在本次事件循环内触发 dragEnd 导致节点位置被错误设置
+          try { (e as any).cancelBubble = true; } catch {}
+          // 下一 tick 再结束 isResizing，确保 Group 的 onDragEnd 看到的是 isResizing=true
+          setTimeout(() => setIsResizing(false), 0);
           try {
             console.log('[Node] resizeEnd', { id: data.id, localX, localY, newW, newH });
           } catch {}
         }}
-      />
+        />
+      )}
     </Group>
   );
 }

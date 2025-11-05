@@ -1,3 +1,12 @@
+// ================================
+// Arrow 箭头组件
+// 
+// 功能：
+// - 渲染一条由 points=[x1,y1,x2,y2] 定义的箭头（世界坐标）
+// - 支持端点拖拽：把屏幕指针通过 Layer 的逆变换映射回世界坐标更新 points
+// - 成功/失败验证时展示 300ms 的渐变动画
+// - 在几何中心上方根据 note 显示用途标签；当 selected 或 focused 时加深颜色
+// ================================
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Arrow as KonvaArrow, Group, Circle, Line, Text } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';

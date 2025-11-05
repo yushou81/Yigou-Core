@@ -34,6 +34,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   // 箭头用途本地缓冲与合成态
   const [arrowNoteText, setArrowNoteText] = useState<string>(shape.type === 'arrow' ? ((shape as any).note || '') : '');
   const [isComposing, setIsComposing] = useState<boolean>(false);
+  // 标题/URL/属性名的本地缓冲，支持中文输入法
+  const [titleText, setTitleText] = useState<string>(shape.title || '');
+  const [apiUrlText, setApiUrlText] = useState<string>(shape.apiUrl || '');
+  const [inputPropsTexts, setInputPropsTexts] = useState<string[]>([...(shape.inputProps || [])]);
+  const [outputPropsTexts, setOutputPropsTexts] = useState<string[]>([...(shape.outputProps || [])]);
+  const [descriptionText, setDescriptionText] = useState<string>(shape.description || '');
 
   useEffect(() => {
     setInputDataText(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
@@ -42,42 +48,67 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     if (shape.type === 'arrow') {
       setArrowNoteText((shape as any).note || '');
     }
+    // 同步标题、URL 与属性名本地值
+    setTitleText(shape.title || '');
+    setApiUrlText(shape.apiUrl || '');
+    setInputPropsTexts([...(shape.inputProps || [])]);
+    setOutputPropsTexts([...(shape.outputProps || [])]);
   }, [shape.id, shape.inputData, shape.outputData]);
+  useEffect(() => {
+    setDescriptionText(shape.description || '');
+  }, [shape.id, shape.description]);
 
   const handleInputChange = (path: 'inputProps' | 'outputProps', index: number, value: string) => {
     if (!shape) return;
-    let next: string[] = [];
+    // 先更新本地文本数组，实时显示；在非合成态下同步到全局
     if (path === 'inputProps') {
-      next = [...(shape.inputProps || [])];
+      const next = [...inputPropsTexts];
       next[index] = value;
-      updateShape(shape.id, { inputProps: next });
+      setInputPropsTexts(next);
+      if (!isComposing) updateShape(shape.id, { inputProps: next });
     } else {
-      next = [...(shape.outputProps || [])];
+      const next = [...outputPropsTexts];
       next[index] = value;
-      updateShape(shape.id, { outputProps: next });
+      setOutputPropsTexts(next);
+      if (!isComposing) updateShape(shape.id, { outputProps: next });
     }
     forceRerender(x => x + 1);
   };
 
   const handleAddProp = (path: 'inputProps' | 'outputProps') => {
     if (!shape) return;
-    const list = [...(shape[path] || [])];
-    list.push('');
-    updateShape(shape.id, { [path]: list });
+    if (path === 'inputProps') {
+      const list = [...inputPropsTexts, ''];
+      setInputPropsTexts(list);
+      updateShape(shape.id, { inputProps: list });
+    } else {
+      const list = [...outputPropsTexts, ''];
+      setOutputPropsTexts(list);
+      updateShape(shape.id, { outputProps: list });
+    }
     forceRerender(x => x + 1);
   };
 
   const handleRemoveProp = (path: 'inputProps' | 'outputProps', index: number) => {
     if (!shape) return;
-    const list = [...(shape[path] || [])];
-    list.splice(index, 1);
-    updateShape(shape.id, { [path]: list });
+    if (path === 'inputProps') {
+      const list = [...inputPropsTexts];
+      list.splice(index, 1);
+      setInputPropsTexts(list);
+      updateShape(shape.id, { inputProps: list });
+    } else {
+      const list = [...outputPropsTexts];
+      list.splice(index, 1);
+      setOutputPropsTexts(list);
+      updateShape(shape.id, { outputProps: list });
+    }
     forceRerender(x => x + 1);
   };
 
   const handleNodeTitleChange = (value: string) => {
     if (!shape) return;
-    updateShape(shape.id, { title: value });
+    setTitleText(value);
+    if (!isComposing) updateShape(shape.id, { title: value });
     forceRerender(x => x + 1);
   };
 
@@ -93,77 +124,15 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     forceRerender(x => x + 1);
   };
 
-  // 解析 API 返回结果（与验证逻辑一致）
+  // 仅保留 API 返回结果解析，供运行后自动提取输出属性名使用
   const parseApiResult = (apiResult: any): Record<string, any> => {
     if (!apiResult) return {};
-    if (typeof apiResult === 'object' && !Array.isArray(apiResult)) {
-      return apiResult;
-    }
-    if (Array.isArray(apiResult)) {
-      return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
-    }
+    if (typeof apiResult === 'object' && !Array.isArray(apiResult)) return apiResult;
+    if (Array.isArray(apiResult)) return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
     if (typeof apiResult === 'string') {
-      try {
-        const parsed = JSON.parse(apiResult);
-        return parseApiResult(parsed);
-      } catch {
-        return { value: apiResult };
-      }
+      try { return parseApiResult(JSON.parse(apiResult)); } catch { return { value: apiResult }; }
     }
     return { value: apiResult };
-  };
-
-  // 获取输入数据（与验证逻辑一致）
-  const getInputData = (): Record<string, any> => {
-    const mode = shape.inputMode || (shape.inputDataEnabled ? 'custom' : 'props');
-    if (mode === 'props') {
-      const props = (shape.inputProps || []).filter((k: string) => !!k);
-      const inputData: Record<string, any> = {};
-      props.forEach((prop: string) => {
-        if (shape.inputData && shape.inputData[prop] !== undefined) {
-          inputData[prop] = shape.inputData[prop];
-        }
-      });
-      return inputData;
-    }
-    return shape.inputData && typeof shape.inputData === 'object' && !Array.isArray(shape.inputData) ? shape.inputData : {};
-  };
-
-  // 获取输出数据（与验证逻辑一致）
-  const getOutputData = (): Record<string, any> => {
-    const mode = shape.outputMode || (shape.outputDataEnabled ? 'custom' : (shape.apiUseAsOutput ? 'api' : 'props'));
-    if (mode === 'props') {
-      const props = (shape.outputProps || []).filter((k: string) => !!k);
-      const outputData: Record<string, any> = {};
-      props.forEach((prop: string) => {
-        if (shape.outputData && shape.outputData[prop] !== undefined) {
-          outputData[prop] = shape.outputData[prop];
-        }
-      });
-      return outputData;
-    }
-    if (mode === 'api') {
-      const apiResult = shape.outputData?.apiResult;
-      if (apiResult) {
-        return parseApiResult(apiResult);
-      }
-      return {};
-    }
-    return shape.outputData && typeof shape.outputData === 'object' && !Array.isArray(shape.outputData) ? shape.outputData : {};
-  };
-
-  // 格式化值的显示
-  const formatValue = (value: any): string => {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'object') {
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return '[Object]';
-      }
-    }
-    return String(value);
   };
 
   // 从数据对象中提取属性名
@@ -222,10 +191,25 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <h4 className={styles.propertyGroupTitle}>名称</h4>
         <input
           type="text"
-          value={shape.title || ''}
+          value={titleText}
           placeholder="节点名称"
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
+        />
+      </div>
+
+      <div className={styles.propertyGroup}>
+        <h4 className={styles.propertyGroupTitle}>描述</h4>
+        <textarea
+          className={styles.propertyTextarea}
+          placeholder="节点描述（将显示在画布上）"
+          value={descriptionText}
+          onChange={(e) => { setDescriptionText(e.target.value); if (!isComposing) updateShape(shape.id, { description: e.target.value }); }}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { description: (e.target as HTMLTextAreaElement).value }); }}
+          onBlur={() => { if (!isComposing) updateShape(shape.id, { description: descriptionText }); }}
         />
       </div>
 
@@ -233,15 +217,17 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <div className={styles.propertyGroup}>
           <h4 className={styles.propertyGroupTitle}>输入属性</h4>
           <div className={styles.propertyList}>
-            {shape.inputProps.map((prop, index) => (
+            {shape.inputProps.map((_, index) => (
               <div key={`input-${index}`} className={styles.propertyItem}>
                 <span className={styles.propertyLabel}>{`输入${index+1}:`}</span>
                 <input 
                   type="text" 
-                  value={prop}
+                  value={inputPropsTexts[index] ?? ''}
                   onChange={(e) => handleInputChange('inputProps', index, e.target.value)}
                   className={styles.propertyInput}
                   placeholder="属性名"
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('inputProps', index, (e.target as HTMLInputElement).value); }}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('inputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -259,14 +245,16 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <div className={styles.propertyGroup}>
           <h4 className={styles.propertyGroupTitle}>输出属性</h4>
           <div className={styles.propertyList}>
-            {shape.outputProps.map((prop, index) => (
+            {shape.outputProps.map((_, index) => (
               <div key={`output-${index}`} className={styles.propertyItem}>
                 <span className={styles.propertyLabel}>{`输出${index+1}`}:</span>
                 <input 
                   type="text" 
-                  value={prop}
+                  value={outputPropsTexts[index] ?? ''}
                   onChange={(e) => handleInputChange('outputProps', index, e.target.value)}
                   className={styles.propertyInput}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('outputProps', index, (e.target as HTMLInputElement).value); }}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -420,10 +408,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <h4 className={styles.propertyGroupTitle}>容器名称</h4>
         <input
           type="text"
-          value={shape.title || ''}
+          value={titleText}
           placeholder="容器名称"
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
         />
       </div>
       {/* ID 为内部使用，不对用户开放编辑与显示 */}
@@ -503,10 +493,25 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <h4 className={styles.propertyGroupTitle}>名称</h4>
         <input
           type="text"
-          value={shape.title || ''}
+          value={titleText}
           placeholder="起点名称"
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
+        />
+      </div>
+
+      <div className={styles.propertyGroup}>
+        <h4 className={styles.propertyGroupTitle}>描述</h4>
+        <textarea
+          className={styles.propertyTextarea}
+          placeholder="起点描述（将显示在画布上）"
+          value={descriptionText}
+          onChange={(e) => { setDescriptionText(e.target.value); if (!isComposing) updateShape(shape.id, { description: e.target.value }); }}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { description: (e.target as HTMLTextAreaElement).value }); }}
+          onBlur={() => { if (!isComposing) updateShape(shape.id, { description: descriptionText }); }}
         />
       </div>
 
@@ -514,15 +519,17 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
         <div className={styles.propertyGroup}>
           <h4 className={styles.propertyGroupTitle}>输出属性</h4>
           <div className={styles.propertyList}>
-            {shape.outputProps.map((prop, index) => (
+            {shape.outputProps.map((_, index) => (
               <div key={`output-${index}`} className={styles.propertyItem}>
                 <span className={styles.propertyLabel}>{`输出${index+1}:`}</span>
                 <input 
                   type="text" 
-                  value={prop}
+                  value={outputPropsTexts[index] ?? ''}
                   onChange={(e) => handleInputChange('outputProps', index, e.target.value)}
                   className={styles.propertyInput}
                   placeholder="属性名"
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('outputProps', index, (e.target as HTMLInputElement).value); }}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -615,7 +622,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
             </div>
             <div className={styles.propertyItem}>
               <span className={styles.propertyLabel}>URL</span>
-              <input className={styles.propertyInput} type="text" value={shape.apiUrl || ''} onChange={(e) => handleApiConfigChange('apiUrl', e.target.value)} placeholder="https://api.example.com" />
+              <input className={styles.propertyInput} type="text" value={apiUrlText} onChange={(e) => { setApiUrlText(e.target.value); if (!isComposing) handleApiConfigChange('apiUrl', e.target.value); }} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={(e) => { setIsComposing(false); handleApiConfigChange('apiUrl', (e.target as HTMLInputElement).value); }} placeholder="https://api.example.com" />
             </div>
             {shape.apiMethod !== 'GET' && (
               <div className={styles.propertyItem}>

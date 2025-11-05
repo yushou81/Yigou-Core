@@ -1,3 +1,21 @@
+// ================================
+// Canvas 画布主组件
+// 
+// 本文件负责：
+// 1) 创建 Konva Stage/Layer 作为“世界坐标系”的渲染容器
+// 2) 维护“相机(camera)”状态：x/y 为平移偏移，scale 为缩放比例
+// 3) 绑定事件：
+//    - 鼠标中键/空格按住 + 拖动平移画布
+//    - 滚轮缩放（围绕鼠标指针放大/缩小）
+//    - 支持从左侧工具栏拖拽组件到画布，按世界坐标落点
+// 4) 负责把 shapes 按类型渲染为各自的 React Konva 图形（Container/Node/Start/Arrow）
+// 5) 顶部 AppBar 提供：保存/加载/运行、上一/下一箭头聚焦等
+// 
+// 坐标系说明：
+// - 我们把 Layer 的 x/y/scaleX/scaleY 作为“相机变换”，始终让 shapes 的 points/x/y 等存储为“世界坐标”。
+// - 居中定位到世界坐标 (cx,cy) 的公式：camera.x = stageWidth/2 - cx*scale，camera.y = stageHeight/2 - cy*scale。
+// - 拖拽端点时需要把屏幕指针坐标通过 Layer 的逆变换反投影回世界坐标（见 Arrow.tsx）。
+// ================================
 import React, { useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stage, Layer, Group, Circle, Rect, Line } from 'react-konva';
@@ -54,6 +72,26 @@ export const Canvas: React.FC = () => {
     addShape,
     updateShape,
   } = useCanvas();
+
+  // 根据容器的新边界，动态判定并更新所有节点的归属（是否被该容器包裹）
+  const updateNodesParentByContainerBounds = useCallback((containerId: string, bx: number, by: number, bw: number, bh: number) => {
+    const nodes = shapes.filter(s => (s.type === 'node' || s.type === 'start'));
+    nodes.forEach(node => {
+      const nx = node.x || 0;
+      const ny = node.y || 0;
+      const nw = node.width || 0;
+      const nh = node.height || 0;
+      const cx = nx + nw / 2;
+      const cy = ny + nh / 2;
+      const inside = cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh;
+      const currentParent = (node as any).parentContainerId || null;
+      if (inside && currentParent !== containerId) {
+        updateShape(node.id, { parentContainerId: containerId });
+      } else if (!inside && currentParent === containerId) {
+        updateShape(node.id, { parentContainerId: null as any });
+      }
+    });
+  }, [shapes, updateShape]);
 
   // 窗口大小变化处理
   useEffect(() => {
@@ -355,6 +393,10 @@ export const Canvas: React.FC = () => {
 
   // 滚轮缩放事件
   const handleWheel = useCallback((e: KonvaEventObject<WheelEvent>) => {
+    // 说明：以鼠标所在位置为中心进行缩放，计算思路：
+    // 1) 取当前鼠标屏幕坐标 pointer
+    // 2) 把 pointer 对应到世界坐标 mousePointTo = screenToWorld(pointer)
+    // 3) 计算新的 scale 后，让该世界点在屏幕中的位置保持不变，得到新的 camera.x/y
     e.evt.preventDefault();
     const stage = e.target.getStage();
     if (!stage) return;
@@ -578,6 +620,8 @@ export const Canvas: React.FC = () => {
               
               // 1) 移动容器
               updateShape(containerId, { x: nx, y: ny });
+              // 1.1) 动态判定所有节点是否被当前容器包裹（随移动实时更新归属）
+              updateNodesParentByContainerBounds(containerId, nx, ny, container.width || 0, container.height || 0);
               // 2) 让容器内的节点跟随移动，并实时更新其连接的箭头位置
               const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
               
@@ -726,6 +770,8 @@ export const Canvas: React.FC = () => {
               const dy = ny - (container.y || 0);
               // 1) 更新容器位置
               updateShape(containerId, { x: nx, y: ny });
+              // 1.1) 结束时再做一次归属判定，确保最终状态正确
+              updateNodesParentByContainerBounds(containerId, nx, ny, container.width || 0, container.height || 0);
               // 2) 将容器内所有节点与其箭头位置最终同步
               const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
               // 先计算所有节点的新位置
@@ -845,9 +891,17 @@ export const Canvas: React.FC = () => {
             }}
             onResize={(id, w, h) => {
               updateShape(id, { width: w, height: h });
+              const container = shapes.find(s => s.id === id);
+              const cx = (container?.x || 0);
+              const cy = (container?.y || 0);
+              updateNodesParentByContainerBounds(id, cx, cy, w, h);
             }}
             onResizeEnd={(id, w, h) => {
               updateShape(id, { width: w, height: h });
+              const container = shapes.find(s => s.id === id);
+              const cx = (container?.x || 0);
+              const cy = (container?.y || 0);
+              updateNodesParentByContainerBounds(id, cx, cy, w, h);
             }}
           />
         );
