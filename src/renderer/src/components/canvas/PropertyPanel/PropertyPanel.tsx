@@ -42,6 +42,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   const [descriptionText, setDescriptionText] = useState<string>(shape.description || '');
 
   useEffect(() => {
+    if (isComposing) return; // 合成期间不从全局回填，避免打断输入
     setInputDataText(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
     setOutputDataText(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
     // 当选中目标变化时，同步箭头用途的本地值
@@ -53,7 +54,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     setApiUrlText(shape.apiUrl || '');
     setInputPropsTexts([...(shape.inputProps || [])]);
     setOutputPropsTexts([...(shape.outputProps || [])]);
-  }, [shape.id, shape.inputData, shape.outputData]);
+  }, [shape.id, shape.title, shape.apiUrl, shape.inputProps, shape.outputProps, shape.inputData, shape.outputData, isComposing]);
   useEffect(() => {
     setDescriptionText(shape.description || '');
   }, [shape.id, shape.description]);
@@ -65,12 +66,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       const next = [...inputPropsTexts];
       next[index] = value;
       setInputPropsTexts(next);
-      if (!isComposing) updateShape(shape.id, { inputProps: next });
+      updateShape(shape.id, { inputProps: next });
     } else {
       const next = [...outputPropsTexts];
       next[index] = value;
       setOutputPropsTexts(next);
-      if (!isComposing) updateShape(shape.id, { outputProps: next });
+      updateShape(shape.id, { outputProps: next });
     }
     forceRerender(x => x + 1);
   };
@@ -108,7 +109,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   const handleNodeTitleChange = (value: string) => {
     if (!shape) return;
     setTitleText(value);
-    if (!isComposing) updateShape(shape.id, { title: value });
+    updateShape(shape.id, { title: value });
     forceRerender(x => x + 1);
   };
 
@@ -206,7 +207,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           className={styles.propertyTextarea}
           placeholder="节点描述（将显示在画布上）"
           value={descriptionText}
-          onChange={(e) => { setDescriptionText(e.target.value); if (!isComposing) updateShape(shape.id, { description: e.target.value }); }}
+          onChange={(e) => { setDescriptionText(e.target.value); updateShape(shape.id, { description: e.target.value }); }}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { description: (e.target as HTMLTextAreaElement).value }); }}
           onBlur={() => { if (!isComposing) updateShape(shape.id, { description: descriptionText }); }}
@@ -228,6 +229,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
                   placeholder="属性名"
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('inputProps', index, (e.target as HTMLInputElement).value); }}
+                  onBlur={(e) => handleInputChange('inputProps', index, e.target.value)}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('inputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -255,6 +257,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
                   className={styles.propertyInput}
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('outputProps', index, (e.target as HTMLInputElement).value); }}
+                  onBlur={(e) => handleInputChange('outputProps', index, e.target.value)}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
@@ -464,10 +467,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
               onChange={(e) => {
                 const val = e.target.value;
                 setArrowNoteText(val);
-                // 实时更新：仅在非合成态时提交，避免打断中文输入法
-                if (!isComposing) {
-                  updateShape(shape.id, { note: val } as any);
-                }
+                updateShape(shape.id, { note: val } as any);
               }}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={(e) => {

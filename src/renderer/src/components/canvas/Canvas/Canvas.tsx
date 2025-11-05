@@ -71,6 +71,7 @@ export const Canvas: React.FC = () => {
     clearSelection,
     addShape,
     updateShape,
+    deleteShape,
   } = useCanvas();
 
   // 根据容器的新边界，动态判定并更新所有节点的归属（是否被该容器包裹）
@@ -128,6 +129,14 @@ export const Canvas: React.FC = () => {
   // 键盘事件处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 输入框内输入时不处理全局快捷键
+      const ae = document.activeElement as HTMLElement | null;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
+        // 允许 Ctrl/Cmd+S 保存，其他快捷键忽略
+        const isMac = navigator.platform.toUpperCase().includes('MAC');
+        const isSave = (isMac && e.metaKey && e.code === 'KeyS') || (!isMac && e.ctrlKey && e.code === 'KeyS');
+        if (!isSave) return;
+      }
       switch (e.code) {
         case 'Escape':
           if (isDrawing) {
@@ -140,6 +149,17 @@ export const Canvas: React.FC = () => {
           e.preventDefault();
           panRef.current.isSpacePressed = true;
           break;
+        case 'Delete':
+        case 'Backspace': {
+          if (selectedShapeIds.length > 0) {
+            e.preventDefault();
+            // 批量删除选中图形
+            const ids = [...selectedShapeIds];
+            ids.forEach(id => deleteShape(id));
+            setSelectedShapeForProperties(null);
+          }
+          break;
+        }
         case 'KeyS': {
           const isMac = navigator.platform.toUpperCase().includes('MAC');
           const isSave = (isMac && e.metaKey) || (!isMac && e.ctrlKey);
@@ -172,7 +192,7 @@ export const Canvas: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isDrawing, cancelDrawing, clearSelection]);
+  }, [isDrawing, cancelDrawing, clearSelection, selectedShapeIds, deleteShape]);
 
   // 获取指针在世界坐标系中的位置
   const getPointerWorldPos = useCallback((stage: any) => {
@@ -596,12 +616,7 @@ export const Canvas: React.FC = () => {
     // C4 可视规则：放大显示细节，缩小隐藏容器内细节（跨容器箭头始终显示）
     const showDetailThreshold = 0.5; // 缩放阈值，可抽到配置
     const isZoomedIn = camera.scale >= showDetailThreshold;
-    const isInsideHiddenContainer = () => {
-      if (!shape.parentContainerId) return false;
-      const container = shapes.find(s => s.id === shape.parentContainerId);
-      if (!container) return false;
-      return !isZoomedIn; // 缩小时隐藏容器内部
-    };
+    // 取消缩小时隐藏容器内部元素的策略，避免看起来像被容器“覆盖”
 
     switch (shape.type) {
       case 'container':
@@ -924,7 +939,6 @@ export const Canvas: React.FC = () => {
           />
         );
       case 'node':
-        if (isInsideHiddenContainer()) return null;
         return (
           <Node
             key={shape.id}
@@ -1006,7 +1020,6 @@ export const Canvas: React.FC = () => {
           />
         );
       case 'start':
-        if (isInsideHiddenContainer()) return null;
         return (
           <Start
             key={shape.id}
@@ -1569,11 +1582,11 @@ export const Canvas: React.FC = () => {
             stageHeight={stageSize.height}
           />
           
-          {shapes
-            // 按容器优先渲染，确保容器在下方
-            .slice()
-            .sort((a, b) => (a.type === 'container' && b.type !== 'container' ? -1 : 0))
-            .map(renderShape)}
+          {(() => {
+            const containers = shapes.filter(s => s.type === 'container');
+            const others = shapes.filter(s => s.type !== 'container');
+            return [...containers, ...others].map(renderShape);
+          })()}
           {drawingShape && renderShape(drawingShape)}
           
           {/* 拖拽预览 - 显示图标 */}
