@@ -7,7 +7,7 @@ export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   gridSize: 20,  // 从 50 缩小到 20，提高定位精度
   snapToGrid: true,
   showGrid: true,
-  gridColor: '#e0e0e0',
+  gridColor: '#b5b5b5',
   backgroundColor: '#ffffff',
   minScale: 0.1,
   maxScale: 3,

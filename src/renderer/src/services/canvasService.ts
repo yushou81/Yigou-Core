@@ -15,6 +15,7 @@ import { ShapeData, ShapeType, CameraState, CanvasState } from '../types/canvas'
  */
 export class CanvasService {
   private state: CanvasState;
+  //参数类型为CanvasState的函数
   private listeners: Set<(state: CanvasState) => void> = new Set();
   private currentProjectPath: string | null = null;
   private static RECENTS_KEY = 'yigou_recent_projects';
@@ -245,20 +246,74 @@ export class CanvasService {
   loadProject(jsonData: string): { success: boolean; message?: string } {
     try {
       const projectData = JSON.parse(jsonData);
+      // 兼容/规范化：容错旧字段与字符串数值，确保渲染一致
+      const normalizeNumber = (v: any, d = 0) => {
+        const n = typeof v === 'string' ? Number(v) : v;
+        return Number.isFinite(n) ? (n as number) : d;
+      };
+      const normalizeAttach = (a: any) => {
+        if (!a) return undefined;
+        const side = a.side;
+        const ratioRaw = a.ratio;
+        const ratio = Math.max(0, Math.min(1, normalizeNumber(ratioRaw, 0.5)));
+        if (side === 'top' || side === 'bottom' || side === 'left' || side === 'right') {
+          return { side, ratio } as any;
+        }
+        return undefined;
+      };
+      const normalizeArrow = (s: any) => {
+        const points = Array.isArray(s.points) ? s.points.map((p: any) => normalizeNumber(p, 0)) : [0, 0, 0, 0];
+        // 兼容旧字段 startNodeId/endNodeId
+        const sourceNodeId = s.sourceNodeId || s.startNodeId || null;
+        const targetNodeId = s.targetNodeId || s.endNodeId || null;
+        return {
+          ...s,
+          type: 'arrow',
+          points,
+          sourceNodeId,
+          targetNodeId,
+          startNodeId: sourceNodeId,
+          endNodeId: targetNodeId,
+          sourceAttach: normalizeAttach(s.sourceAttach),
+          targetAttach: normalizeAttach(s.targetAttach),
+        };
+      };
+      const normalizeRectLike = (s: any) => ({
+        ...s,
+        x: normalizeNumber(s.x, 0),
+        y: normalizeNumber(s.y, 0),
+        width: normalizeNumber(s.width, 200),
+        height: normalizeNumber(s.height, 120),
+      });
+      const normalizeShape = (s: any) => {
+        const type = s.type;
+        if (type === 'arrow') return normalizeArrow(s);
+        if (type === 'node' || type === 'start' || type === 'container') return normalizeRectLike(s);
+        // 兜底：未知类型不渲染
+        return null;
+      };
       
       // 验证数据格式
       if (!projectData.shapes || !Array.isArray(projectData.shapes)) {
         return { success: false, message: '无效的项目文件格式：缺少 shapes 数组' };
       }
 
-      // 恢复相机状态（如果存在）
+      // 恢复相机状态（如果存在）并规整
       if (projectData.camera) {
-        this.setCamera(projectData.camera);
+        const cam = projectData.camera || {};
+        this.setCamera({
+          scale: normalizeNumber(cam.scale, 1) || 1,
+          x: normalizeNumber(cam.x, 0),
+          y: normalizeNumber(cam.y, 0),
+        });
       }
 
-      // 恢复形状数据
+      // 恢复形状数据（规整/过滤非法）
+      const normalizedShapes = (projectData.shapes as any[])
+        .map(normalizeShape)
+        .filter(Boolean);
       this.updateState({
-        shapes: projectData.shapes,
+        shapes: normalizedShapes as any,
         selectedShapeIds: [],
         isDrawing: false,
         drawingShape: null,
@@ -306,8 +361,23 @@ export class CanvasService {
       }
       
       if (!window.api) {
-        console.error('[CanvasService] window.api 未定义，window 对象内容:', Object.keys(window));
-        return { success: false, message: '文件 API 不可用：window.api 未定义。请确保在 Electron 环境中运行，并且 preload 脚本已正确加载。' };
+        // Web 回退：直接触发浏览器下载
+        try {
+          const jsonData = this.exportProject();
+          const blob = new Blob([jsonData], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+          a.href = url;
+          a.download = `yigou-project-${ts}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return { success: true, filePath: undefined };
+        } catch (err) {
+          return { success: false, message: `浏览器下载失败: ${err}` };
+        }
       }
       
       if (typeof window.api.saveProject !== 'function') {
@@ -353,8 +423,30 @@ export class CanvasService {
       }
       
       if (!window.api) {
-        console.error('[CanvasService] window.api 未定义，window 对象内容:', Object.keys(window));
-        return { success: false, message: '文件 API 不可用：window.api 未定义。请确保在 Electron 环境中运行，并且 preload 脚本已正确加载。' };
+        // Web 回退：打开文件选择器，读取 JSON 并加载
+        try {
+          const data = await new Promise<string>((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,application/json';
+            input.onchange = () => {
+              const file = input.files && input.files[0];
+              if (!file) { reject('未选择文件'); return; }
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || ''));
+              reader.onerror = () => reject(reader.error || '读取失败');
+              reader.readAsText(file);
+            };
+            input.click();
+          });
+          const loadRes = this.loadProject(data);
+          if (loadRes.success) {
+            this.setCurrentProjectPath(null);
+          }
+          return loadRes;
+        } catch (err) {
+          return { success: false, message: `浏览器选择文件失败: ${err}` };
+        }
       }
       
       if (typeof window.api.loadProject !== 'function') {

@@ -57,7 +57,7 @@ export const Arrow: React.FC<ArrowProps> = ({
         (prevStatus !== 'error' && currentStatus === 'error')) {
       setAnimationProgress(0);
       const startTime = Date.now();
-      const duration = 300; // 动画时长 300ms
+      const duration = 200; // 动画时长 200ms
       
       const animate = () => {
         const elapsed = Date.now() - startTime;
@@ -316,7 +316,7 @@ export const Arrow: React.FC<ArrowProps> = ({
             fontSize={12}
             fill={labelColor}
             offsetX={((data as any).note as string).length * 6 / 2}
-          />
+        />
         </Group>
       )}
 

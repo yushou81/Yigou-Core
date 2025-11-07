@@ -42,6 +42,9 @@ import styles from './Canvas.module.css';
 export const Canvas: React.FC = () => {
   const navigate = useNavigate();
   const stageRef = useRef<any>(null);
+  const layerRef = useRef<any>(null);
+  const panRafRef = useRef<number>(0 as any);
+  const panDeltaRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const [stageSize, setStageSize] = React.useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -357,6 +360,8 @@ export const Canvas: React.FC = () => {
       const mouseEvt = e.evt as MouseEvent;
       panRef.current.lastX = mouseEvt.clientX;
       panRef.current.lastY = mouseEvt.clientY;
+      // 开始命令式平移：关闭命中检测以减轻事件处理
+      try { layerRef.current && layerRef.current.listening(false); } catch {}
       e.evt.preventDefault();
       return;
     }
@@ -379,7 +384,21 @@ export const Canvas: React.FC = () => {
       const dy = mouseEvt.clientY - panRef.current.lastY;
       panRef.current.lastX = mouseEvt.clientX;
       panRef.current.lastY = mouseEvt.clientY;
-      setCamera({ scale: camera.scale, x: camera.x + dx, y: camera.y + dy });
+      // 命令式更新 Layer 位置，合批到 RAF
+      panDeltaRef.current.dx += dx;
+      panDeltaRef.current.dy += dy;
+      if (!panRafRef.current) {
+        panRafRef.current = requestAnimationFrame(() => {
+          panRafRef.current = 0 as any;
+          const layer = layerRef.current;
+          if (layer) {
+            try {
+              layer.position({ x: (camera.x || 0) + panDeltaRef.current.dx, y: (camera.y || 0) + panDeltaRef.current.dy });
+              layer.getStage()?.batchDraw();
+            } catch {}
+          }
+        });
+      }
       e.evt.preventDefault();
       return;
     }
@@ -399,17 +418,30 @@ export const Canvas: React.FC = () => {
         points: [currentPoints[0], currentPoints[1], endX, endY],
       });
     }
-  }, [isPanning, camera, setCamera, isDrawing, drawingShape, getPointerWorldPos, updateDrawingShape, shapes]);
+  }, [isPanning, camera, isDrawing, drawingShape, getPointerWorldPos, updateDrawingShape, shapes]);
 
   // 鼠标抬起事件
   const handleMouseUp = useCallback(() => {
     if (isPanning) {
       setIsPanning(false);
+      // 结束命令式平移：同步 React camera，并恢复设置
+      const layer = layerRef.current;
+      const ndx = panDeltaRef.current.dx;
+      const ndy = panDeltaRef.current.dy;
+      if (layer) {
+        try { layer.listening(true); } catch {}
+      }
+      if (ndx !== 0 || ndy !== 0) {
+        setCamera({ scale: camera.scale, x: (camera.x || 0) + ndx, y: (camera.y || 0) + ndy });
+      }
+      // 重置增量，下一次从 0 开始
+      panDeltaRef.current.dx = 0;
+      panDeltaRef.current.dy = 0;
     }
     if (isDrawing) {
       endDrawing();
     }
-  }, [isPanning, isDrawing, endDrawing]);
+  }, [isPanning, isDrawing, endDrawing, camera, setCamera]);
 
   // 滚轮缩放事件
   const handleWheel = useCallback((e: KonvaEventObject<WheelEvent>) => {
@@ -452,7 +484,7 @@ export const Canvas: React.FC = () => {
       // 1) 更新节点位置
       updateShape(id, { x: finalX, y: finalY });
 
-      // 2) 让所有与该节点相连的箭头端点跟随（保持吸附在边框上）
+      // 2) 让所有与该节点相连的箭头端点跟随（保持吸附在边框上，优先使用 attach 信息）
       const movedNode = { ...shape, x: finalX, y: finalY } as any;
       const connectedArrows = shapes.filter(s => s.type === 'arrow' && (
         (s as any).sourceNodeId === id || (s as any).targetNodeId === id ||
@@ -461,14 +493,67 @@ export const Canvas: React.FC = () => {
       connectedArrows.forEach(arrow => {
         const pts = arrow.points || [0, 0, 0, 0];
         let [x1, y1, x2, y2] = pts;
+        const w = movedNode.width || 0;
+        const h = movedNode.height || 0;
+        
+        // 更新起点：如果连接到节点，优先使用 attach 信息固定到连接点
         if ((arrow as any).sourceNodeId === id || (arrow as any).startNodeId === id) {
+          if ((arrow as any).sourceAttach) {
+            // 有 attach 信息，直接使用固定到连接点
+            const a = (arrow as any).sourceAttach;
+            if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
+            if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
+            if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
+            if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+          } else {
+            // 没有 attach 信息，计算并更新 attach 信息
           const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
-          if (snap) { x1 = snap.x; y1 = snap.y; }
+            if (snap) {
+              x1 = snap.x;
+              y1 = snap.y;
+              // 计算并更新 attach 信息
+              const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+              const ratio = (side === 'top' || side === 'bottom')
+                ? (snap.x - movedNode.x) / w
+                : (snap.y - movedNode.y) / h;
+              updateShape(arrow.id, { 
+                sourceAttach: { side, ratio },
+                points: [x1, y1, x2, y2]
+              });
+              return; // 已经在上面更新了
+            }
+          }
         }
+        
+        // 更新终点：如果连接到节点，优先使用 attach 信息固定到连接点
         if ((arrow as any).targetNodeId === id || (arrow as any).endNodeId === id) {
+          if ((arrow as any).targetAttach) {
+            // 有 attach 信息，直接使用固定到连接点
+            const a = (arrow as any).targetAttach;
+            if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
+            if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
+            if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
+            if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+          } else {
+            // 没有 attach 信息，计算并更新 attach 信息
           const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
-          if (snap) { x2 = snap.x; y2 = snap.y; }
+            if (snap) {
+              x2 = snap.x;
+              y2 = snap.y;
+              // 计算并更新 attach 信息
+              const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+              const ratio = (side === 'top' || side === 'bottom')
+                ? (snap.x - movedNode.x) / w
+                : (snap.y - movedNode.y) / h;
+              updateShape(arrow.id, { 
+                targetAttach: { side, ratio },
+                points: [x1, y1, x2, y2]
+              });
+              return; // 已经在上面更新了
+            }
+          }
         }
+        
         updateShape(arrow.id, { points: [x1, y1, x2, y2] });
       });
 
@@ -613,10 +698,7 @@ export const Canvas: React.FC = () => {
     const isSelected = selectedShapeIds.includes(shape.id);
     const isDragging = false; // 可以根据需要实现拖拽状态
 
-    // C4 可视规则：放大显示细节，缩小隐藏容器内细节（跨容器箭头始终显示）
-    const showDetailThreshold = 0.5; // 缩放阈值，可抽到配置
-    const isZoomedIn = camera.scale >= showDetailThreshold;
-    // 取消缩小时隐藏容器内部元素的策略，避免看起来像被容器“覆盖”
+    // 取消缩小时隐藏容器内部元素与箭头的策略，避免看起来像被容器“覆盖”或箭头丢失
 
     switch (shape.type) {
       case 'container':
@@ -630,22 +712,40 @@ export const Canvas: React.FC = () => {
               const target = e.target; const nx = target.x(); const ny = target.y();
               const container = shapes.find(s => s.id === containerId);
               if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
-              const dx = nx - (container.x || 0);
-              const dy = ny - (container.y || 0);
+              // 使用容器的最新位置计算差值，避免累积误差
+              const containerLatest = shapes.find(s => s.id === containerId);
+              const oldContainerX = (containerLatest?.x ?? container.x) || 0;
+              const oldContainerY = (containerLatest?.y ?? container.y) || 0;
+              const dx = nx - oldContainerX;
+              const dy = ny - oldContainerY;
               
               // 1) 移动容器
               updateShape(containerId, { x: nx, y: ny });
-              // 1.1) 动态判定所有节点是否被当前容器包裹（随移动实时更新归属）
-              updateNodesParentByContainerBounds(containerId, nx, ny, container.width || 0, container.height || 0);
-              // 2) 让容器内的节点跟随移动，并实时更新其连接的箭头位置
-              const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
+              // 1.1) 拖动中不修改归属，防止抖动；仅在拖动结束时判定归属
+              // 2) 让容器内（或旧边界内）的节点跟随移动，并实时更新其连接的箭头位置
+              // 使用旧的容器边界来判定哪些节点需要跟随（包括尚未归属但位于旧边界内的节点）
+              const oldCx = (container.x || 0), oldCy = (container.y || 0);
+              const cw = (container.width || 0), ch = (container.height || 0);
+              const childNodes = shapes.filter(s => {
+                if (!(s.type === 'node' || s.type === 'start')) return false;
+                const alreadyChild = (s as any).parentContainerId === containerId;
+                const centerX = (s.x || 0) + (s.width || 0) / 2;
+                const centerY = (s.y || 0) + (s.height || 0) / 2;
+                const insideOldBounds = centerX >= oldCx && centerX <= oldCx + cw && centerY >= oldCy && centerY <= oldCy + ch;
+                return alreadyChild || insideOldBounds;
+              });
               
-              // 先计算所有节点的新位置
+              // 先计算所有节点的新位置（使用最新的节点位置，避免累积误差）
               const movedNodes = new Map<string, any>();
               childNodes.forEach(node => {
-                const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
+                // 从 shapes 中获取最新的节点位置
+                const latestNode = shapes.find(s => s.id === node.id) || node;
+                const nodeX = (latestNode.x || 0);
+                const nodeY = (latestNode.y || 0);
+                const newX = nodeX + dx;
+                const newY = nodeY + dy;
                 updateShape(node.id, { x: newX, y: newY });
-                movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
+                movedNodes.set(node.id, { ...latestNode, x: newX, y: newY } as any);
               });
               
               // 收集所有连接到容器内节点的箭头，避免重复更新
@@ -663,29 +763,43 @@ export const Canvas: React.FC = () => {
               });
               
               // 容器旧边界（用于检查自由端点是否在容器内）
-              const oldCx = (container.x || 0), oldCy = (container.y || 0);
-              const cw = (container.width || 0), ch = (container.height || 0);
               
               // 统一更新所有箭头的位置
               arrowsToUpdate.forEach(arrow => {
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
-                const originalPoints = [x1, y1, x2, y2];
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+                let needsUpdate = false;
+                const updateData: any = {};
                 
-                // 更新起点
+                // 更新起点：如果连接到节点，优先使用 attach 信息固定到连接点
                 if (startNodeId && movedNodes.has(startNodeId)) {
                   const movedNode = movedNodes.get(startNodeId);
+                  const w = movedNode.width || 0;
+                  const h = movedNode.height || 0;
                   if ((arrow as any).sourceAttach) {
-                    const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).sourceAttach;
                     if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                     if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                     if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+                    needsUpdate = true;
                   } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                     const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
-                    if (snap) { x1 = snap.x; y1 = snap.y; }
+                    if (snap) {
+                      x1 = snap.x;
+                      y1 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateData.sourceAttach = { side, ratio };
+                      needsUpdate = true;
+                    }
                   }
                 } else if (!startNodeId) {
                   // 起点未连接节点，检查是否是自由端点且在容器内
@@ -693,21 +807,37 @@ export const Canvas: React.FC = () => {
                   if (startInside) {
                     x1 = x1 + dx;
                     y1 = y1 + dy;
+                    needsUpdate = true;
                   }
                 }
                 
-                // 更新终点
+                // 更新终点：如果连接到节点，优先使用 attach 信息固定到连接点
                 if (endNodeId && movedNodes.has(endNodeId)) {
                   const movedNode = movedNodes.get(endNodeId);
+                  const w = movedNode.width || 0;
+                  const h = movedNode.height || 0;
                   if ((arrow as any).targetAttach) {
-                    const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).targetAttach;
                     if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                     if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                     if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+                    needsUpdate = true;
                   } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                     const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
-                    if (snap) { x2 = snap.x; y2 = snap.y; }
+                    if (snap) {
+                      x2 = snap.x;
+                      y2 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateData.targetAttach = { side, ratio };
+                      needsUpdate = true;
+                    }
                   }
                 } else if (!endNodeId) {
                   // 终点未连接节点，检查是否是自由端点且在容器内
@@ -715,14 +845,14 @@ export const Canvas: React.FC = () => {
                   if (endInside) {
                     x2 = x2 + dx;
                     y2 = y2 + dy;
+                    needsUpdate = true;
                   }
                 }
                 
-                const finalPoints = [x1, y1, x2, y2];
-                const pointsChanged = JSON.stringify(originalPoints) !== JSON.stringify(finalPoints);
-                
-                if (pointsChanged) {
-                  updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                // 统一更新箭头位置和 attach 信息
+                if (needsUpdate) {
+                  updateData.points = [x1, y1, x2, y2];
+                  updateShape(arrow.id, updateData);
                 }
               });
               // 3) 同步容器内的自由箭头端点（未绑定节点的端点，或者连接到容器外节点的端点但端点本身在容器内）
@@ -781,20 +911,38 @@ export const Canvas: React.FC = () => {
               const target = e.target; const nx = target.x(); const ny = target.y();
               const container = shapes.find(s => s.id === containerId);
               if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
-              const dx = nx - (container.x || 0);
-              const dy = ny - (container.y || 0);
+              // 使用容器的最新位置计算差值，避免累积误差
+              const containerLatest = shapes.find(s => s.id === containerId);
+              const oldContainerX = (containerLatest?.x ?? container.x) || 0;
+              const oldContainerY = (containerLatest?.y ?? container.y) || 0;
+              const dx = nx - oldContainerX;
+              const dy = ny - oldContainerY;
               // 1) 更新容器位置
               updateShape(containerId, { x: nx, y: ny });
               // 1.1) 结束时再做一次归属判定，确保最终状态正确
               updateNodesParentByContainerBounds(containerId, nx, ny, container.width || 0, container.height || 0);
-              // 2) 将容器内所有节点与其箭头位置最终同步
-              const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
-              // 先计算所有节点的新位置
+              // 2) 将容器内（或旧边界内）所有节点与其箭头位置最终同步
+              const oldCx = (container.x || 0), oldCy = (container.y || 0);
+              const cw = (container.width || 0), ch = (container.height || 0);
+              const childNodes = shapes.filter(s => {
+                if (!(s.type === 'node' || s.type === 'start')) return false;
+                const alreadyChild = (s as any).parentContainerId === containerId;
+                const centerX = (s.x || 0) + (s.width || 0) / 2;
+                const centerY = (s.y || 0) + (s.height || 0) / 2;
+                const insideOldBounds = centerX >= oldCx && centerX <= oldCx + cw && centerY >= oldCy && centerY <= oldCy + ch;
+                return alreadyChild || insideOldBounds;
+              });
+              // 先计算所有节点的新位置（使用最新的节点位置，避免累积误差）
               const movedNodes = new Map<string, any>();
               childNodes.forEach(node => {
-                const newX = (node.x || 0) + dx; const newY = (node.y || 0) + dy;
+                // 从 shapes 中获取最新的节点位置
+                const latestNode = shapes.find(s => s.id === node.id) || node;
+                const nodeX = (latestNode.x || 0);
+                const nodeY = (latestNode.y || 0);
+                const newX = nodeX + dx;
+                const newY = nodeY + dy;
                 updateShape(node.id, { x: newX, y: newY });
-                movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
+                movedNodes.set(node.id, { ...latestNode, x: newX, y: newY } as any);
               });
               
               // 收集所有连接到容器内节点的箭头，避免重复更新
@@ -818,42 +966,75 @@ export const Canvas: React.FC = () => {
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
                 
-                // 更新起点
+                // 更新起点：如果连接到节点，优先使用 attach 信息固定到连接点
+                let needsUpdate = false;
                 if (startNodeId && movedNodes.has(startNodeId)) {
                   const movedNode = movedNodes.get(startNodeId);
                   if ((arrow as any).sourceAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
                     const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                     if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                     if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
+                    needsUpdate = true;
                   } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                     const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
-                    if (snap) { x1 = snap.x; y1 = snap.y; }
+                    if (snap) {
+                      x1 = snap.x;
+                      y1 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / (movedNode.width || 1)
+                        : (snap.y - movedNode.y) / (movedNode.height || 1);
+                      updateShape(arrow.id, { 
+                        sourceAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      needsUpdate = false; // 已经在上面更新了
+                    }
                   }
                 }
                 
-                // 更新终点
+                // 更新终点：如果连接到节点，优先使用 attach 信息固定到连接点
                 if (endNodeId && movedNodes.has(endNodeId)) {
                   const movedNode = movedNodes.get(endNodeId);
                   if ((arrow as any).targetAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
                     const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
                     if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                     if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                     if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                     if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
+                    needsUpdate = true;
                   } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                     const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
-                    if (snap) { x2 = snap.x; y2 = snap.y; }
+                    if (snap) {
+                      x2 = snap.x;
+                      y2 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / (movedNode.width || 1)
+                        : (snap.y - movedNode.y) / (movedNode.height || 1);
+                      updateShape(arrow.id, { 
+                        targetAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      needsUpdate = false; // 已经在上面更新了
+                    }
                   }
                 }
                 
+                if (needsUpdate) {
                 updateShape(arrow.id, { points: [x1, y1, x2, y2] });
+                }
               });
               // 3) 对自由箭头端点做最终同步：两端都在容器内则两端一起移动；仅一端在内则移动该端
               // 跳过已经在步骤2中更新过的箭头（两端都连接到容器内节点的箭头）
-              const oldCx = (container.x || 0), oldCy = (container.y || 0);
-              const cw = (container.width || 0), ch = (container.height || 0);
               const allArrows = shapes.filter(s => s.type === 'arrow') as any[];
               const updatedArrowIds = new Set(arrowsToUpdate.keys());
               
@@ -921,12 +1102,6 @@ export const Canvas: React.FC = () => {
           />
         );
       case 'arrow':
-        // 箭头：如果两端均在某容器内且当前缩放隐藏，则可选择隐藏；跨容器则始终显示
-        const sourceContainerId = shapes.find(s => s.id === (shape as any).sourceNodeId)?.parentContainerId || null;
-        const targetContainerId = shapes.find(s => s.id === (shape as any).targetNodeId)?.parentContainerId || null;
-        const isCrossContainer = sourceContainerId && targetContainerId && sourceContainerId !== targetContainerId;
-        const hideArrowForZoom = !isZoomedIn && !isCrossContainer && (sourceContainerId || targetContainerId);
-        if (hideArrowForZoom) return null;
         return (
           <Arrow
             key={shape.id}
@@ -982,27 +1157,67 @@ export const Canvas: React.FC = () => {
               connectedArrows.forEach(arrow => {
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
-                if (((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) && (arrow as any).sourceAttach) {
-                  const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                const w = movedNode.width || 0;
+                const h = movedNode.height || 0;
+                
+                // 更新起点：如果连接到节点，优先使用 attach 信息固定到连接点
+                if ((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) {
+                  if ((arrow as any).sourceAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).sourceAttach;
                   if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                   if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                   if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                   if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
-                } else if ((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) {
+                  } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                   const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
-                  if (snap) { x1 = snap.x; y1 = snap.y; }
+                    if (snap) {
+                      x1 = snap.x;
+                      y1 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateShape(arrow.id, { 
+                        sourceAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      return; // 已经在上面更新了
+                    }
+                  }
                 }
 
-                if (((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) && (arrow as any).targetAttach) {
-                  const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                // 更新终点：如果连接到节点，优先使用 attach 信息固定到连接点
+                if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
+                  if ((arrow as any).targetAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).targetAttach;
                   if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                   if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                   if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                   if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
-                } else if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
+                  } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                   const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
-                  if (snap) { x2 = snap.x; y2 = snap.y; }
+                    if (snap) {
+                      x2 = snap.x;
+                      y2 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateShape(arrow.id, { 
+                        targetAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      return; // 已经在上面更新了
+                    }
+                  }
                 }
+                
                 updateShape(arrow.id, { points: [x1, y1, x2, y2] });
               });
             }}
@@ -1060,26 +1275,67 @@ export const Canvas: React.FC = () => {
               connectedArrows.forEach(arrow => {
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
-                if (((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) && (arrow as any).sourceAttach) {
-                  const a = (arrow as any).sourceAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                const w = movedNode.width || 0;
+                const h = movedNode.height || 0;
+                
+                // 更新起点：如果连接到节点，优先使用 attach 信息固定到连接点
+                if ((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) {
+                  if ((arrow as any).sourceAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).sourceAttach;
                   if (a.side === 'top') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y; }
                   if (a.side === 'bottom') { x1 = movedNode.x + a.ratio * w; y1 = movedNode.y + h; }
                   if (a.side === 'left') { x1 = movedNode.x; y1 = movedNode.y + a.ratio * h; }
                   if (a.side === 'right') { x1 = movedNode.x + w; y1 = movedNode.y + a.ratio * h; }
-                } else if ((arrow as any).sourceNodeId === nodeId || (arrow as any).startNodeId === nodeId) {
+                  } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                   const snap = findNearestPointOnShapeEdge(x1, y1, [movedNode], 1000000);
-                  if (snap) { x1 = snap.x; y1 = snap.y; }
+                    if (snap) {
+                      x1 = snap.x;
+                      y1 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateShape(arrow.id, { 
+                        sourceAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      return; // 已经在上面更新了
+                    }
+                  }
                 }
-                if (((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) && (arrow as any).targetAttach) {
-                  const a = (arrow as any).targetAttach; const w = movedNode.width || 0; const h = movedNode.height || 0;
+                
+                // 更新终点：如果连接到节点，优先使用 attach 信息固定到连接点
+                if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
+                  if ((arrow as any).targetAttach) {
+                    // 有 attach 信息，直接使用固定到连接点
+                    const a = (arrow as any).targetAttach;
                   if (a.side === 'top') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y; }
                   if (a.side === 'bottom') { x2 = movedNode.x + a.ratio * w; y2 = movedNode.y + h; }
                   if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                   if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
-                } else if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
+                  } else {
+                    // 没有 attach 信息，计算并更新 attach 信息
                   const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
-                  if (snap) { x2 = snap.x; y2 = snap.y; }
+                    if (snap) {
+                      x2 = snap.x;
+                      y2 = snap.y;
+                      // 计算并更新 attach 信息
+                      const side = snap.type === 'top' ? 'top' : snap.type === 'bottom' ? 'bottom' : snap.type === 'left' ? 'left' : 'right';
+                      const ratio = (side === 'top' || side === 'bottom')
+                        ? (snap.x - movedNode.x) / w
+                        : (snap.y - movedNode.y) / h;
+                      updateShape(arrow.id, { 
+                        targetAttach: { side, ratio },
+                        points: [x1, y1, x2, y2]
+                      });
+                      return; // 已经在上面更新了
+                    }
+                  }
                 }
+                
                 updateShape(arrow.id, { points: [x1, y1, x2, y2] });
               });
             }}
@@ -1528,6 +1784,13 @@ export const Canvas: React.FC = () => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <GridBackground
+          scale={camera.scale}
+          offsetX={camera.x}
+          offsetY={camera.y}
+          stageWidth={stageSize.width}
+          stageHeight={stageSize.height}
+        />
         <Stage
           ref={stageRef}
           width={stageSize.width}
@@ -1553,7 +1816,21 @@ export const Canvas: React.FC = () => {
             const dy = evt.clientY - panRef.current.lastY;
             panRef.current.lastX = evt.clientX;
             panRef.current.lastY = evt.clientY;
-            setCamera({ scale: camera.scale, x: camera.x + dx, y: camera.y + dy });
+          // 改为命令式：合并到 RAF
+          panDeltaRef.current.dx += dx;
+          panDeltaRef.current.dy += dy;
+          if (!panRafRef.current) {
+            panRafRef.current = requestAnimationFrame(() => {
+              panRafRef.current = 0 as any;
+              const layer = layerRef.current;
+              if (layer) {
+                try {
+                  layer.position({ x: (camera.x || 0) + panDeltaRef.current.dx, y: (camera.y || 0) + panDeltaRef.current.dy });
+                  layer.getStage()?.batchDraw();
+                } catch {}
+              }
+            });
+          }
             const stage = e.target.getStage();
             if (stage) {
               stage.position({ x: 0, y: 0 });
@@ -1569,19 +1846,12 @@ export const Canvas: React.FC = () => {
           className={styles.stage}
         >
         <Layer
+          ref={layerRef}
           x={camera.x}
           y={camera.y}
           scaleX={camera.scale}
           scaleY={camera.scale}
         >
-          <GridBackground
-            scale={camera.scale}
-            offsetX={camera.x}
-            offsetY={camera.y}
-            stageWidth={stageSize.width}
-            stageHeight={stageSize.height}
-          />
-          
           {(() => {
             const containers = shapes.filter(s => s.type === 'container');
             const others = shapes.filter(s => s.type !== 'container');

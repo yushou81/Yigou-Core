@@ -143,16 +143,7 @@ export const Node: React.FC<NodeProps> = ({
     return { value: apiResult };
   };
 
-  // 已移除：画布不再显示输入数据
-
-  // 已移除：画布不再显示输出数据
-
-  // 已移除：不再格式化输入/输出值
-
-  // 取消输入属性在画布显示
-
-  // 取消输出属性在画布显示
-
+ 
   // 渲染连接点（只在悬停时显示）
   const renderConnectionPoints = () => {
     if (!isHovered && !isSelected) return null;

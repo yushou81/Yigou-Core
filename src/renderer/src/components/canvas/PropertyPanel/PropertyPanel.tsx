@@ -21,6 +21,9 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
     if (prevIdRef.current !== shape.id) {
       setAnimateClass('');
       prevIdRef.current = shape.id;
+      // 切换形状时重置合成状态
+      setIsComposing(false);
+      isComposingRef.current = false;
       return;
     }
   }, [shape]);
@@ -34,6 +37,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   // 箭头用途本地缓冲与合成态
   const [arrowNoteText, setArrowNoteText] = useState<string>(shape.type === 'arrow' ? ((shape as any).note || '') : '');
   const [isComposing, setIsComposing] = useState<boolean>(false);
+  const isComposingRef = useRef<boolean>(false); // 用于在 onChange 中获取最新的合成状态
   // 标题/URL/属性名的本地缓冲，支持中文输入法
   const [titleText, setTitleText] = useState<string>(shape.title || '');
   const [apiUrlText, setApiUrlText] = useState<string>(shape.apiUrl || '');
@@ -43,21 +47,41 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
 
   useEffect(() => {
     if (isComposing) return; // 合成期间不从全局回填，避免打断输入
-    setInputDataText(shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '');
-    setOutputDataText(shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '');
+    // 只在值不同时才更新，避免不必要的 setState 导致闪烁
+    const newInputDataText = shape.inputData ? JSON.stringify(shape.inputData, null, 2) : '';
+    if (newInputDataText !== inputDataText) setInputDataText(newInputDataText);
+    const newOutputDataText = shape.outputData ? JSON.stringify(shape.outputData, null, 2) : '';
+    if (newOutputDataText !== outputDataText) setOutputDataText(newOutputDataText);
     // 当选中目标变化时，同步箭头用途的本地值
     if (shape.type === 'arrow') {
-      setArrowNoteText((shape as any).note || '');
+      const newNote = (shape as any).note || '';
+      // 使用函数式更新，避免闭包问题
+      setArrowNoteText(prev => {
+        if (prev !== newNote) return newNote;
+        return prev;
+      });
     }
     // 同步标题、URL 与属性名本地值
-    setTitleText(shape.title || '');
-    setApiUrlText(shape.apiUrl || '');
-    setInputPropsTexts([...(shape.inputProps || [])]);
-    setOutputPropsTexts([...(shape.outputProps || [])]);
-  }, [shape.id, shape.title, shape.apiUrl, shape.inputProps, shape.outputProps, shape.inputData, shape.outputData, isComposing]);
+    const newTitle = shape.title || '';
+    if (newTitle !== titleText) setTitleText(newTitle);
+    const newApiUrl = shape.apiUrl || '';
+    if (newApiUrl !== apiUrlText) setApiUrlText(newApiUrl);
+    // 比较数组是否变化
+    const newInputProps = [...(shape.inputProps || [])];
+    if (JSON.stringify(newInputProps) !== JSON.stringify(inputPropsTexts)) {
+      setInputPropsTexts(newInputProps);
+    }
+    const newOutputProps = [...(shape.outputProps || [])];
+    if (JSON.stringify(newOutputProps) !== JSON.stringify(outputPropsTexts)) {
+      setOutputPropsTexts(newOutputProps);
+    }
+  }, [shape.id, shape.title, shape.apiUrl, shape.inputProps, shape.outputProps, shape.inputData, shape.outputData, isComposing, shape.type, (shape as any).note]);
   useEffect(() => {
-    setDescriptionText(shape.description || '');
-  }, [shape.id, shape.description]);
+    if (isComposing) return; // 合成期间不从全局回填，避免打断输入
+    const newDesc = shape.description || '';
+    // 只在值不同时才更新，避免不必要的 setState 导致闪烁
+    if (newDesc !== descriptionText) setDescriptionText(newDesc);
+  }, [shape.id, shape.description, isComposing]);
 
   const handleInputChange = (path: 'inputProps' | 'outputProps', index: number, value: string) => {
     if (!shape) return;
@@ -66,12 +90,18 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       const next = [...inputPropsTexts];
       next[index] = value;
       setInputPropsTexts(next);
+      // 合成期间不更新全局，避免打断输入法
+      if (!isComposing) {
       updateShape(shape.id, { inputProps: next });
+      }
     } else {
       const next = [...outputPropsTexts];
       next[index] = value;
       setOutputPropsTexts(next);
+      // 合成期间不更新全局，避免打断输入法
+      if (!isComposing) {
       updateShape(shape.id, { outputProps: next });
+      }
     }
     forceRerender(x => x + 1);
   };
@@ -99,7 +129,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
       updateShape(shape.id, { inputProps: list });
     } else {
       const list = [...outputPropsTexts];
-      list.splice(index, 1);
+    list.splice(index, 1);
       setOutputPropsTexts(list);
       updateShape(shape.id, { outputProps: list });
     }
@@ -109,7 +139,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
   const handleNodeTitleChange = (value: string) => {
     if (!shape) return;
     setTitleText(value);
+    // 合成期间不更新全局，避免打断输入法
+    if (!isComposing) {
     updateShape(shape.id, { title: value });
+    }
     forceRerender(x => x + 1);
   };
 
@@ -197,7 +230,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
           onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
+          onCompositionEnd={(e) => { 
+            const finalValue = (e.target as HTMLInputElement).value;
+            setTitleText(finalValue); // 先更新本地状态为最终值
+            setIsComposing(false);
+            updateShape(shape.id, { title: finalValue }); // 再更新全局状态
+          }}
         />
       </div>
 
@@ -207,9 +245,20 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           className={styles.propertyTextarea}
           placeholder="节点描述（将显示在画布上）"
           value={descriptionText}
-          onChange={(e) => { setDescriptionText(e.target.value); updateShape(shape.id, { description: e.target.value }); }}
+          onChange={(e) => { 
+            setDescriptionText(e.target.value); 
+            // 合成期间不更新全局，避免打断输入法
+            if (!isComposing) {
+              updateShape(shape.id, { description: e.target.value }); 
+            }
+          }}
           onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { description: (e.target as HTMLTextAreaElement).value }); }}
+          onCompositionEnd={(e) => { 
+            const finalValue = (e.target as HTMLTextAreaElement).value;
+            setDescriptionText(finalValue); // 先更新本地状态为最终值
+            setIsComposing(false);
+            updateShape(shape.id, { description: finalValue }); // 再更新全局状态
+          }}
           onBlur={() => { if (!isComposing) updateShape(shape.id, { description: descriptionText }); }}
         />
       </div>
@@ -228,7 +277,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
                   className={styles.propertyInput}
                   placeholder="属性名"
                   onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('inputProps', index, (e.target as HTMLInputElement).value); }}
+                  onCompositionEnd={(e) => { 
+                    const finalValue = (e.target as HTMLInputElement).value;
+                    setIsComposing(false);
+                    handleInputChange('inputProps', index, finalValue); // 这会更新本地和全局状态
+                  }}
                   onBlur={(e) => handleInputChange('inputProps', index, e.target.value)}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('inputProps', index)} title="删除">
@@ -256,7 +309,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
                   onChange={(e) => handleInputChange('outputProps', index, e.target.value)}
                   className={styles.propertyInput}
                   onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('outputProps', index, (e.target as HTMLInputElement).value); }}
+                  onCompositionEnd={(e) => { 
+                    const finalValue = (e.target as HTMLInputElement).value;
+                    setIsComposing(false);
+                    handleInputChange('outputProps', index, finalValue); // 这会更新本地和全局状态
+                  }}
                   onBlur={(e) => handleInputChange('outputProps', index, e.target.value)}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
@@ -416,7 +473,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
           onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
+          onCompositionEnd={(e) => { 
+            const finalValue = (e.target as HTMLInputElement).value;
+            setTitleText(finalValue); // 先更新本地状态为最终值
+            setIsComposing(false);
+            updateShape(shape.id, { title: finalValue }); // 再更新全局状态
+          }}
         />
       </div>
       {/* ID 为内部使用，不对用户开放编辑与显示 */}
@@ -467,18 +529,24 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
               onChange={(e) => {
                 const val = e.target.value;
                 setArrowNoteText(val);
-                updateShape(shape.id, { note: val } as any);
+                // 合成期间不更新全局，避免打断输入法（使用 ref 获取最新值）
+                if (!isComposingRef.current) {
+                  updateShape(shape.id, { note: val } as any);
+                }
               }}
-              onCompositionStart={() => setIsComposing(true)}
+              onCompositionStart={() => { 
+                setIsComposing(true); 
+                isComposingRef.current = true; 
+              }}
               onCompositionEnd={(e) => {
+                const finalValue = (e.target as HTMLInputElement).value;
+                setArrowNoteText(finalValue); // 先更新本地状态为最终值
+                isComposingRef.current = false;
                 setIsComposing(false);
-                const val = (e.target as HTMLInputElement).value;
-                setArrowNoteText(val);
-                // 合成结束后提交一次，确保中文输入结果保存
-                updateShape(shape.id, { note: val } as any);
+                updateShape(shape.id, { note: finalValue } as any); // 再更新全局状态
               }}
               onBlur={() => {
-                if (!isComposing) updateShape(shape.id, { note: arrowNoteText } as any);
+                if (!isComposingRef.current) updateShape(shape.id, { note: arrowNoteText } as any);
               }}
             />
           </div>
@@ -498,7 +566,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           className={styles.propertyInput}
           onChange={(e) => handleNodeTitleChange(e.target.value)}
           onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { title: (e.target as HTMLInputElement).value }); }}
+          onCompositionEnd={(e) => { 
+            const finalValue = (e.target as HTMLInputElement).value;
+            setTitleText(finalValue); // 先更新本地状态为最终值
+            setIsComposing(false);
+            updateShape(shape.id, { title: finalValue }); // 再更新全局状态
+          }}
         />
       </div>
 
@@ -510,7 +583,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
           value={descriptionText}
           onChange={(e) => { setDescriptionText(e.target.value); if (!isComposing) updateShape(shape.id, { description: e.target.value }); }}
           onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={(e) => { setIsComposing(false); updateShape(shape.id, { description: (e.target as HTMLTextAreaElement).value }); }}
+          onCompositionEnd={(e) => { 
+            const finalValue = (e.target as HTMLTextAreaElement).value;
+            setDescriptionText(finalValue); // 先更新本地状态为最终值
+            setIsComposing(false);
+            updateShape(shape.id, { description: finalValue }); // 再更新全局状态
+          }}
           onBlur={() => { if (!isComposing) updateShape(shape.id, { description: descriptionText }); }}
         />
       </div>
@@ -529,7 +607,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ shape }) => {
                   className={styles.propertyInput}
                   placeholder="属性名"
                   onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={(e) => { setIsComposing(false); handleInputChange('outputProps', index, (e.target as HTMLInputElement).value); }}
+                  onCompositionEnd={(e) => { 
+                    const finalValue = (e.target as HTMLInputElement).value;
+                    setIsComposing(false);
+                    handleInputChange('outputProps', index, finalValue); // 这会更新本地和全局状态
+                  }}
                 />
                 <button className={styles.iconButton} onClick={() => handleRemoveProp('outputProps', index)} title="删除">
                   <span className={styles.icon}>×</span>
