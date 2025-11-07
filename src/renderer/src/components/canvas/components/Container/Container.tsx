@@ -15,6 +15,7 @@ export interface ContainerProps {
 
 export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, onSelect, onDragEnd, onDragMove, onResize, onResizeEnd }) => {
   const [isResizing, setIsResizing] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const width = data.width || 400;
   const height = data.height || 300;
   const title = data.title || 'Container';
@@ -29,6 +30,8 @@ export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, 
       y={data.y}
       draggable={!isResizing}
       onClick={handleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onDragMove={(e) => {
         if (isResizing) { (e as any).cancelBubble = true; return; }
         onDragMove && onDragMove(e as unknown as KonvaEventObject<DragEvent>, data.id)
@@ -57,7 +60,8 @@ export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, 
         fill="#111827"
       />
 
-      {/* 右下角拉伸手柄 */}
+      {/* 右下角拉伸手柄 - 只在悬停或选中时显示 */}
+      {(isHovered || isSelected) && (
       <Rect
         x={(data.width || width) - 10}
         y={(data.height || height) - 10}
@@ -123,6 +127,7 @@ export const Container: React.FC<ContainerProps> = ({ data, isSelected = false, 
           } catch {}
         }}
       />
+      )}
     </Group>
   );
 };

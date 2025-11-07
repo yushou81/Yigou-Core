@@ -1,3 +1,13 @@
+// ================================
+// CanvasService：画布状态的单例服务
+// 
+// 负责：
+// - 保存/更新/删除 shape 列表
+// - 维护相机 camera 状态（x/y/scale）
+// - 绘制状态（isDrawing/drawingShape）与选择集合 selectedShapeIds
+// - 对外提供 subscribe 订阅，useCanvas 通过它获取状态与变更
+// - 提供持久化（保存/加载）接口（通过 preload 暴露的 ipc）
+// ================================
 import { ShapeData, ShapeType, CameraState, CanvasState } from '../types/canvas';
 
 /**

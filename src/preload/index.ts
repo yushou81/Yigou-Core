@@ -24,7 +24,7 @@ const api = {
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
-try {
+  try {
   // 检查 contextIsolated，如果未定义，默认尝试使用 contextBridge
   const isContextIsolated = typeof process !== 'undefined' && process.contextIsolated !== false
   
@@ -32,10 +32,10 @@ try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
     console.log('[Preload] API exposed via contextBridge')
-  } else {
-    // @ts-ignore (define in dts)
+} else {
+  // @ts-ignore (define in dts)
     ;(window as any).electron = electronAPI
-    // @ts-ignore (define in dts)
+  // @ts-ignore (define in dts)
     ;(window as any).api = api
     console.log('[Preload] API exposed via window object')
   }
@@ -55,7 +55,7 @@ try {
   try {
     if (typeof window !== 'undefined') {
       // @ts-ignore
-      window.api = api
+  window.api = api
       console.log('[Preload] API set on window after error')
     }
   } catch (fallbackError) {

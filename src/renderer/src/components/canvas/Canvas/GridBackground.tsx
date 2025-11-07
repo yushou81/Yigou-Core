@@ -1,3 +1,10 @@
+// ================================
+// GridBackground：网格背景渲染
+// 
+// 说明：
+// - 根据相机 scale 与偏移在 Layer 背后绘制网格/点阵
+// - 只是视觉辅助，不参与交互与坐标换算
+// ================================
 import React from 'react';
 import { Circle, Group } from 'react-konva';
 import { DEFAULT_CANVAS_SETTINGS } from '../../../constants/canvas';
