@@ -26,14 +26,24 @@ code {
   font-size: 85%;
 }
 
-#root {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  margin-bottom: 80px;
-}
+/* In your index.css / App.css / styles.css */
 
+#root {
+  /* We set height and width to 100%
+    so that our .homePageContainer (which has height: 100vh)
+    has a parent to fill.
+  */
+  width: 100vw;
+  height: 100vh;
+
+  /* REMOVE all other properties:
+    - REMOVE display: flex;
+    - REMOVE align-items: center;
+    - REMOVE justify-content: center;
+    - REMOVE flex-direction: column;
+    - REMOVE margin-bottom;
+  */
+}
 .logo {
   margin-bottom: 20px;
   -webkit-user-drag: none;

@@ -147,7 +147,7 @@ export const Canvas: React.FC = () => {
   const handleDragStart = useCallback((shapeType: ShapeType, event: React.DragEvent) => {
     event.dataTransfer.setData('application/shape-type', shapeType);
     event.dataTransfer.effectAllowed = 'copy';
-    
+
     // 设置拖拽预览图像 - 使用工具栏图标
     const canvas = document.createElement('canvas');
     canvas.width = 48;
@@ -157,17 +157,17 @@ export const Canvas: React.FC = () => {
       // 设置背景
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.fillRect(0, 0, 48, 48);
-      
+
       // 设置边框
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 2;
       ctx.strokeRect(1, 1, 46, 46);
-      
+
       // 绘制图标
       ctx.fillStyle = '#3b82f6';
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 2;
-      
+
       if (shapeType === 'node' || shapeType === 'start') {
         // 绘制节点图标
         ctx.fillRect(8, 8, 32, 20);
@@ -201,7 +201,7 @@ export const Canvas: React.FC = () => {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-    
+
     // 更新拖拽预览位置
     const stage = stageRef.current;
     if (stage) {
@@ -209,7 +209,7 @@ export const Canvas: React.FC = () => {
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const worldPos = screenToWorld(x, y, camera);
-      
+
       const shapeType = e.dataTransfer.getData('application/shape-type');
       if (shapeType) {
         // 图标预览直接使用鼠标位置，不需要偏移
@@ -235,28 +235,28 @@ export const Canvas: React.FC = () => {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragPreview(null);
-    
+
     const shapeType = e.dataTransfer.getData('application/shape-type') as ShapeType;
     if (!shapeType) return;
-    
+
     const stage = stageRef.current;
     if (!stage) return;
-    
+
     const rect = stage.container().getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const worldPos = screenToWorld(x, y, camera);
-    
+
     // 创建形状时调整位置，让形状中心对准鼠标位置
     const offsetX = (shapeType === 'node' || shapeType === 'start') ? -50 : -25;
     const offsetY = (shapeType === 'node' || shapeType === 'start') ? -30 : 0;
-    
+
     const finalX = worldPos.x + offsetX;
     const finalY = worldPos.y + offsetY;
-    
+
     // 创建临时 shape 以获取实际尺寸
     const tempShape = createDefaultShape(shapeType, finalX, finalY);
-    
+
     // 对于 node 和 start 类型，先检查是否落在容器内
     let parentContainerId: string | null = null;
     if (shapeType === 'node' || shapeType === 'start') {
@@ -274,9 +274,9 @@ export const Canvas: React.FC = () => {
         parentContainerId = hit.id;
       }
     }
-    
+
     const newShape = createDefaultShape(shapeType, finalX, finalY, parentContainerId ? { parentContainerId } : {});
-    
+
     if (shapeType === 'arrow') {
       startDrawing(newShape);
     } else {
@@ -306,7 +306,7 @@ export const Canvas: React.FC = () => {
     // 点击空白区域 - 只清除选择和关闭属性面板，不创建形状
     if (e.target === stage && !dragPreview) {
       clearSelection();
-      
+
       // 关闭属性面板
       setSelectedShapeForProperties(null);
     }
@@ -329,14 +329,14 @@ export const Canvas: React.FC = () => {
     if (isDrawing && drawingShape) {
       const stage = e.target.getStage();
       if (!stage) return;
-      
+
       const pos = getPointerWorldPos(stage);
       const currentPoints = drawingShape.points!;
-      
+
       // 仅移动，不做画布定位点/连接点匹配
       const endX = pos.x;
       const endY = pos.y;
-      
+
       updateDrawingShape({
         points: [currentPoints[0], currentPoints[1], endX, endY],
       });
@@ -363,16 +363,16 @@ export const Canvas: React.FC = () => {
     if (!pointer) return;
 
     const direction = e.evt.deltaY > 0 ? 1 : -1;
-    const newScaleRaw = direction > 0 
-      ? camera.scale / DEFAULT_CANVAS_SETTINGS.scaleFactor 
+    const newScaleRaw = direction > 0
+      ? camera.scale / DEFAULT_CANVAS_SETTINGS.scaleFactor
       : camera.scale * DEFAULT_CANVAS_SETTINGS.scaleFactor;
-    
+
     const newScale = clampCameraScale(newScaleRaw);
-    
+
     const mousePointTo = screenToWorld(pointer.x, pointer.y, camera);
     const newX = pointer.x - mousePointTo.x * newScale;
     const newY = pointer.y - mousePointTo.y * newScale;
-    
+
     setCamera({ scale: newScale, x: newX, y: newY });
   }, [camera, setCamera]);
 
@@ -534,7 +534,7 @@ export const Canvas: React.FC = () => {
       const confirm = window.confirm('加载项目将覆盖当前画布内容，是否继续？');
       if (!confirm) return;
     }
-    
+
     const result = await canvasService.loadProjectFromFile();
     if (result.success) {
       alert('项目加载成功！');
@@ -575,12 +575,12 @@ export const Canvas: React.FC = () => {
               if (!container) { updateShape(containerId, { x: nx, y: ny }); return; }
               const dx = nx - (container.x || 0);
               const dy = ny - (container.y || 0);
-              
+
               // 1) 移动容器
               updateShape(containerId, { x: nx, y: ny });
               // 2) 让容器内的节点跟随移动，并实时更新其连接的箭头位置
               const childNodes = shapes.filter(s => (s.type === 'node' || s.type === 'start') && (s as any).parentContainerId === containerId);
-              
+
               // 先计算所有节点的新位置
               const movedNodes = new Map<string, any>();
               childNodes.forEach(node => {
@@ -588,7 +588,7 @@ export const Canvas: React.FC = () => {
                 updateShape(node.id, { x: newX, y: newY });
                 movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
               });
-              
+
               // 收集所有连接到容器内节点的箭头，避免重复更新
               const arrowsToUpdate = new Map<string, any>();
               childNodes.forEach(node => {
@@ -602,11 +602,11 @@ export const Canvas: React.FC = () => {
                   }
                 });
               });
-              
+
               // 容器旧边界（用于检查自由端点是否在容器内）
               const oldCx = (container.x || 0), oldCy = (container.y || 0);
               const cw = (container.width || 0), ch = (container.height || 0);
-              
+
               // 统一更新所有箭头的位置
               arrowsToUpdate.forEach(arrow => {
                 const pts = arrow.points || [0, 0, 0, 0];
@@ -614,7 +614,7 @@ export const Canvas: React.FC = () => {
                 const originalPoints = [x1, y1, x2, y2];
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
-                
+
                 // 更新起点
                 if (startNodeId && movedNodes.has(startNodeId)) {
                   const movedNode = movedNodes.get(startNodeId);
@@ -636,7 +636,7 @@ export const Canvas: React.FC = () => {
                     y1 = y1 + dy;
                   }
                 }
-                
+
                 // 更新终点
                 if (endNodeId && movedNodes.has(endNodeId)) {
                   const movedNode = movedNodes.get(endNodeId);
@@ -658,10 +658,10 @@ export const Canvas: React.FC = () => {
                     y2 = y2 + dy;
                   }
                 }
-                
+
                 const finalPoints = [x1, y1, x2, y2];
                 const pointsChanged = JSON.stringify(originalPoints) !== JSON.stringify(finalPoints);
-                
+
                 if (pointsChanged) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
                 }
@@ -670,34 +670,34 @@ export const Canvas: React.FC = () => {
               // 跳过已经在步骤2中更新过的箭头
               const allArrows = shapes.filter(s => s.type === 'arrow') as any[];
               const updatedArrowIds = new Set(arrowsToUpdate.keys());
-              
+
               allArrows.forEach(arrow => {
                 // 如果箭头已经在步骤2中更新过，跳过
                 if (updatedArrowIds.has(arrow.id)) {
                   return;
                 }
-                
+
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
-                
+
                 // 检查起点连接的节点是否在容器内
                 const sourceNodeInContainer = startNodeId ? (() => {
                   const sourceNode = shapes.find(s => s.id === startNodeId);
                   return sourceNode && (sourceNode as any).parentContainerId === containerId;
                 })() : false;
-                
+
                 // 检查终点连接的节点是否在容器内
                 const targetNodeInContainer = endNodeId ? (() => {
                   const targetNode = shapes.find(s => s.id === endNodeId);
                   return targetNode && (targetNode as any).parentContainerId === containerId;
                 })() : false;
-                
+
                 // 使用旧的容器位置来检查端点是否在容器内（因为箭头端点还是旧坐标）
                 const startInside = x1 >= oldCx && x1 <= oldCx + cw && y1 >= oldCy && y1 <= oldCy + ch;
                 const endInside = x2 >= oldCx && x2 <= oldCx + cw && y2 >= oldCy && y2 <= oldCy + ch;
-                
+
                 let moved = false;
                 // 如果起点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
                 if (startInside && !sourceNodeInContainer) {
@@ -705,14 +705,14 @@ export const Canvas: React.FC = () => {
                   y1 = y1 + dy;
                   moved = true;
                 }
-                
+
                 // 如果终点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
                 if (endInside && !targetNodeInContainer) {
                   x2 = x2 + dx;
                   y2 = y2 + dy;
                   moved = true;
                 }
-                
+
                 if (moved) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
                 }
@@ -735,7 +735,7 @@ export const Canvas: React.FC = () => {
                 updateShape(node.id, { x: newX, y: newY });
                 movedNodes.set(node.id, { ...node, x: newX, y: newY } as any);
               });
-              
+
               // 收集所有连接到容器内节点的箭头，避免重复更新
               const arrowsToUpdate = new Map<string, any>();
               childNodes.forEach(node => {
@@ -749,14 +749,14 @@ export const Canvas: React.FC = () => {
                   }
                 });
               });
-              
+
               // 统一更新所有箭头的位置
               arrowsToUpdate.forEach(arrow => {
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
-                
+
                 // 更新起点
                 if (startNodeId && movedNodes.has(startNodeId)) {
                   const movedNode = movedNodes.get(startNodeId);
@@ -771,7 +771,7 @@ export const Canvas: React.FC = () => {
                     if (snap) { x1 = snap.x; y1 = snap.y; }
                   }
                 }
-                
+
                 // 更新终点
                 if (endNodeId && movedNodes.has(endNodeId)) {
                   const movedNode = movedNodes.get(endNodeId);
@@ -786,7 +786,7 @@ export const Canvas: React.FC = () => {
                     if (snap) { x2 = snap.x; y2 = snap.y; }
                   }
                 }
-                
+
                 updateShape(arrow.id, { points: [x1, y1, x2, y2] });
               });
               // 3) 对自由箭头端点做最终同步：两端都在容器内则两端一起移动；仅一端在内则移动该端
@@ -795,34 +795,34 @@ export const Canvas: React.FC = () => {
               const cw = (container.width || 0), ch = (container.height || 0);
               const allArrows = shapes.filter(s => s.type === 'arrow') as any[];
               const updatedArrowIds = new Set(arrowsToUpdate.keys());
-              
+
               allArrows.forEach(arrow => {
                 // 如果箭头已经在步骤2中更新过，跳过
                 if (updatedArrowIds.has(arrow.id)) {
                   return;
                 }
-                
+
                 const pts = arrow.points || [0, 0, 0, 0];
                 let [x1, y1, x2, y2] = pts;
                 const startNodeId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
                 const endNodeId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
-                
+
                 // 检查起点连接的节点是否在容器内
                 const sourceNodeInContainer = startNodeId ? (() => {
                   const sourceNode = shapes.find(s => s.id === startNodeId);
                   return sourceNode && (sourceNode as any).parentContainerId === containerId;
                 })() : false;
-                
+
                 // 检查终点连接的节点是否在容器内
                 const targetNodeInContainer = endNodeId ? (() => {
                   const targetNode = shapes.find(s => s.id === endNodeId);
                   return targetNode && (targetNode as any).parentContainerId === containerId;
                 })() : false;
-                
+
                 // 使用旧的容器位置来检查端点是否在容器内（因为箭头端点还是旧坐标）
                 const startInside = x1 >= oldCx && x1 <= oldCx + cw && y1 >= oldCy && y1 <= oldCy + ch;
                 const endInside = x2 >= oldCx && x2 <= oldCx + cw && y2 >= oldCy && y2 <= oldCy + ch;
-                
+
                 let moved = false;
                 // 如果起点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
                 if (startInside && !sourceNodeInContainer) {
@@ -830,14 +830,14 @@ export const Canvas: React.FC = () => {
                   y1 = y1 + dy;
                   moved = true;
                 }
-                
+
                 // 如果终点在容器内，且（未连接到节点 或 连接到容器外的节点），则移动
                 if (endInside && !targetNodeInContainer) {
                   x2 = x2 + dx;
                   y2 = y2 + dy;
                   moved = true;
                 }
-                
+
                 if (moved) {
                   updateShape(arrow.id, { points: [x1, y1, x2, y2] });
                 }
@@ -932,7 +932,7 @@ export const Canvas: React.FC = () => {
                   if (a.side === 'left') { x2 = movedNode.x; y2 = movedNode.y + a.ratio * h; }
                   if (a.side === 'right') { x2 = movedNode.x + w; y2 = movedNode.y + a.ratio * h; }
                 } else if ((arrow as any).targetNodeId === nodeId || (arrow as any).endNodeId === nodeId) {
-                  const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000);
+                    const snap = findNearestPointOnShapeEdge(x2, y2, [movedNode], 1000000)
                   if (snap) { x2 = snap.x; y2 = snap.y; }
                 }
                 updateShape(arrow.id, { points: [x1, y1, x2, y2] });
@@ -1149,7 +1149,7 @@ export const Canvas: React.FC = () => {
           // 获取节点的输出数据（类似 Spring Boot 的返回对象）
           const getOutputData = (node: any): Record<string, any> => {
             const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
-            
+
             if (mode === 'props') {
               // Props 模式：从 outputProps 和 outputData 构建数据对象
               // 类似 Spring Boot 的 @ResponseBody，返回的是键值对
@@ -1163,7 +1163,7 @@ export const Canvas: React.FC = () => {
               });
               return data;
             }
-            
+
             if (mode === 'api') {
               // API 模式：解析 API 返回结果
               const apiResult = node.outputData?.apiResult;
@@ -1172,7 +1172,7 @@ export const Canvas: React.FC = () => {
               }
               return {};
             }
-            
+
             // Custom 模式：直接使用 outputData
             const data = node.outputData;
             return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
@@ -1181,23 +1181,23 @@ export const Canvas: React.FC = () => {
           // 递归检查嵌套对象结构是否匹配（类似 Spring Boot 的 @RequestBody 验证）
           const checkStructureMatch = (source: any, target: any, path: string = ''): { match: boolean; missing: string[] } => {
             const missing: string[] = [];
-            
+
             // 如果目标不是对象，跳过结构检查（允许任意类型）
             if (!target || typeof target !== 'object' || Array.isArray(target)) {
               return { match: true, missing: [] };
             }
-            
+
             // 如果源不是对象，不匹配
             if (!source || typeof source !== 'object' || Array.isArray(source)) {
               return { match: false, missing: [path || 'root'] };
             }
-            
+
             // 递归检查每个键
             for (const key in target) {
               const fullPath = path ? `${path}.${key}` : key;
               const targetValue = target[key];
               const sourceValue = source[key];
-              
+
               // 如果目标值也是对象，递归检查
               if (targetValue && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
                 const nested = checkStructureMatch(sourceValue || {}, targetValue, fullPath);
@@ -1211,23 +1211,23 @@ export const Canvas: React.FC = () => {
                 }
               }
             }
-            
+
             return { match: missing.length === 0, missing };
           };
 
           // 验证数据匹配（类似 Spring Boot 的参数绑定验证）
           const validateDataMatch = (sourceData: Record<string, any>, targetNode: any, sourceNode: any): { match: boolean; missing: string[]; message: string } => {
             const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
-            
+
             if (mode === 'props') {
               // Props 模式：类似 @RequestParam，基于属性名的精确匹配
               // 只验证属性名是否匹配，不验证值是否存在
               const requiredProps = (targetNode.inputProps || []).filter((k: string) => !!k);
-              
+
               // 获取源节点的输出属性列表（属性名列表）
               const sourceOutputMode = sourceNode.outputMode || (sourceNode.outputDataEnabled ? 'custom' : (sourceNode.apiUseAsOutput ? 'api' : 'props'));
               let sourceOutputProps: string[] = [];
-              
+
               if (sourceOutputMode === 'props') {
                 // Props 模式：直接从 outputProps 获取属性名列表
                 sourceOutputProps = (sourceNode.outputProps || []).filter((k: string) => !!k);
@@ -1238,20 +1238,20 @@ export const Canvas: React.FC = () => {
                 // Custom 模式：从数据对象中获取属性名
                 sourceOutputProps = Object.keys(sourceData);
               }
-              
+
               const sourcePropsSet = new Set(sourceOutputProps);
               const missing = requiredProps.filter(prop => !sourcePropsSet.has(prop));
-              
+
               if (missing.length === 0) {
                 return { match: true, missing: [], message: '参数匹配成功' };
               }
-              return { 
-                match: false, 
-                missing, 
-                message: `缺少必需参数: ${missing.join(', ')}` 
+              return {
+                match: false,
+                missing,
+                message: `缺少必需参数: ${missing.join(', ')}`
               };
             }
-            
+
             // Custom 模式：类似 @RequestBody，递归检查对象结构
             const expectedStructure = targetNode.inputData;
             if (expectedStructure && typeof expectedStructure === 'object' && !Array.isArray(expectedStructure)) {
@@ -1259,12 +1259,12 @@ export const Canvas: React.FC = () => {
               return {
                 match: result.match,
                 missing: result.missing,
-                message: result.match 
-                  ? '数据结构匹配成功' 
+                message: result.match
+                  ? '数据结构匹配成功'
                   : `缺少必需字段: ${result.missing.join(', ')}`
               };
             }
-            
+
             // 如果没有定义输入结构，允许任意输入
             return { match: true, missing: [], message: '允许任意输入' };
           };
@@ -1299,7 +1299,7 @@ export const Canvas: React.FC = () => {
               const newOutput = { ...(node.outputData || {}), apiResult: data };
               updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
               node.outputData = newOutput;
-              
+
               // 如果使用 API 作为输出，并且是 props 模式，自动提取属性名
               if (mode === 'api' || mode === 'props') {
                 const parsedData = parseApiResult(data);
@@ -1322,7 +1322,7 @@ export const Canvas: React.FC = () => {
           // 传递数据到目标节点（类似 Spring Boot 的参数绑定）
           const passDataToTarget = (sourceData: Record<string, any>, targetNode: any) => {
             const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
-            
+
             if (mode === 'props') {
               // Props 模式：类似 @RequestParam，按属性名精确绑定
               const inputProps = (targetNode.inputProps || []).filter((k: string) => !!k);
@@ -1387,7 +1387,7 @@ export const Canvas: React.FC = () => {
           for (const start of starts) {
             const queue: Array<{ nodeId: string; sourceNode?: any }> = [{ nodeId: start.id }];
             const visited = new Set<string>();
-            
+
             while (queue.length) {
               const { nodeId: currentId } = queue.shift()!;
               if (visited.has(currentId)) continue;
@@ -1450,7 +1450,7 @@ export const Canvas: React.FC = () => {
           }
         }}
       />
-      <Toolbar 
+      <Toolbar
         onDragStart={handleDragStart}
       />
 
@@ -1514,14 +1514,14 @@ export const Canvas: React.FC = () => {
             stageWidth={stageSize.width}
             stageHeight={stageSize.height}
           />
-          
+
           {shapes
             // 按容器优先渲染，确保容器在下方
             .slice()
             .sort((a, b) => (a.type === 'container' && b.type !== 'container' ? -1 : 0))
             .map(renderShape)}
           {drawingShape && renderShape(drawingShape)}
-          
+
           {/* 拖拽预览 - 显示图标 */}
           {dragPreview && (
             <Group>
@@ -1537,7 +1537,7 @@ export const Canvas: React.FC = () => {
                 shadowColor="rgba(0, 0, 0, 0.2)"
                 shadowOffset={{ x: 0, y: 2 }}
               />
-              
+
               {/* 图标 */}
               {dragPreview.shapeType === 'node' && (
                 <Group>
@@ -1557,7 +1557,7 @@ export const Canvas: React.FC = () => {
                   <Circle x={dragPreview.x + 12} y={dragPreview.y + 6} radius={2} fill="white" />
                 </Group>
               )}
-              
+
               {dragPreview.shapeType === 'arrow' && (
                 <Group>
                   {/* 箭头线条 */}
@@ -1582,10 +1582,10 @@ export const Canvas: React.FC = () => {
         </Layer>
       </Stage>
       </div>
-      
+
       {selectedShapeForProperties && (
-        <PropertyPanel 
-          shape={selectedShapeForProperties} 
+        <PropertyPanel
+          shape={selectedShapeForProperties}
         />
       )}
 

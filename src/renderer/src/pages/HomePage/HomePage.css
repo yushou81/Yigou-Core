@@ -1,0 +1,174 @@
+/* HomePage.css */
+
+/* Use a modern font stack and set base styles */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.homePageContainer {
+
+  background-image: linear-gradient(rgba(255, 255,255, 0.4), rgba(255, 255, 255, 1));
+  width: 100%;/*100vw;*/
+  height: 100%;/*100vh;*/
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #7777ff;
+
+  overflow: hidden;
+}
+
+.homePageGrid {
+  width: 80%;/*960px*/
+  height: 80%;
+ /* max-width: 92vw;*/
+  display: grid;
+  /* Responsive grid: 1 column on mobile, 2 on desktop */
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+/* Media query for larger screens (e.g., tablets and desktops) */
+@media (min-width: 768px) {
+  .homePageGrid {
+    grid-template-columns: 320px 1fr;
+  }
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 12px;
+  /* A slightly more modern, softer shadow */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+  padding: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitle {
+  margin: 4px 0 20px 0;
+  font-size: 1.5rem; /* 24px */
+  font-weight: 600;
+  color: #111827;
+}
+
+.buttonGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.actionButton {
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #0095ff;
+  text-align: left;
+  cursor: pointer;
+  font-size: 1rem; /* 16px */
+  font-weight: 500;
+  color: #ffffff;
+  transition: all 0.2s ease-in-out;
+}
+
+.actionButton:hover {
+  background-color: #6fc2e1; /* Light hover background */
+  border-color: #d1d5db;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); /* Subtle shadow on hover */
+}
+
+.actionButton:focus-visible {
+  outline: 2px solid #3b82f6; /* Accessibility focus ring */
+  outline-offset: 2px;
+}
+
+.recentItemsList {
+  display: grid;
+  gap: 8px;
+
+  /* --- 這就是您要的滾動列表 --- */
+  /* Sets a maximum height for the list */
+  max-height: 400px;
+  /* Adds a vertical scrollbar ONLY if content overflows */
+  overflow-y: auto;
+  /* --- 滾動列表結束 --- */
+
+  padding-right: 4px; /* For scrollbar space */
+  flex-grow: 1;
+}
+
+.noRecents {
+  color: #6b7280;
+  font-size: 0.9rem;
+  padding: 20px 0;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+}
+.recentItemButton {
+  /* --- 這確保了按鈕高度固定 --- */
+  /* Padding + flex centering ensures a consistent height */
+  padding: 30px 14px;
+  width: 100%;
+  height:  15%;
+  display: flex;
+  align-items: center; /* Vertically centers content */
+  overflow: hidden; /* Prevents long text from breaking layout */
+  /* --- 固定高度結束 --- */
+
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  /* ... other styles */
+}
+/*
+.recentItemButton {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  transition: all 0.2s ease-in-out;
+  overflow: hidden; /* Ensure content doesn't break out
+}
+*/
+.recentItemButton:hover {
+  background-color: #ffffff;
+  border-color: #d1d5db;
+}
+
+.recentItemButton:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+.recentItemPath {
+  overflow: hidden;
+  text-overflow: ellipsis; /* 如果路徑太長，顯示 "..." */
+  white-space: nowrap;   /* 保持路徑在同一行 */
+  max-width: 60%;      /* 路徑最大寬度 */
+}
+/*
+.recentItemPath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%; /* Adjust as needed
+  font-size: 0.9rem;
+  color: #111827;
+}
+*/
+.recentItemDate {
+  color: #9ca3af;
+  font-size: 0.75rem; /* 12px */
+  white-space: nowrap;
+  margin-left: 16px;
+}

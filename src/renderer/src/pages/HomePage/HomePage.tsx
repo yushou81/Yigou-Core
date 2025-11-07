@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { canvasService } from '../../services/canvasService'
+import './HomePage.css' // Import the CSS file
 
 type RecentItem = { path: string; openedAt: number }
 
@@ -19,7 +20,7 @@ function getRecents(): RecentItem[] {
 export default function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
   const [recents, setRecents] = React.useState<RecentItem[]>(getRecents())
-  
+
   const refreshRecents = () => setRecents(getRecents())
 
   const handleNew = () => {
@@ -45,47 +46,39 @@ export default function HomePage(): React.JSX.Element {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6' }}>
-      <div style={{ width: 960, maxWidth: '92vw', display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
-        <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 6px 18px rgba(0,0,0,0.06)', padding: 20 }}>
-          <h2 style={{ margin: '4px 0 16px 0' }}>开始</h2>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <button onClick={handleNew} style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', textAlign: 'left', cursor: 'pointer' }}>
+    <div className="homePageContainer">
+      <div className="homePageGrid">
+        {/* Start Card */}
+        <div className="card">
+          <h2 className="cardTitle">开始</h2>
+          <div className="buttonGrid">
+            <button onClick={handleNew} className="actionButton">
               新建空白项目
             </button>
-            <button onClick={handleOpen} style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', textAlign: 'left', cursor: 'pointer' }}>
+            <button onClick={handleOpen} className="actionButton">
               打开本地项目…
             </button>
           </div>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 6px 18px rgba(0,0,0,0.06)', padding: 20 }}>
-          <h2 style={{ margin: '4px 0 16px 0' }}>最近</h2>
+        {/* Recents Card */}
+        <div className="card">
+          <h2 className="cardTitle">最近</h2>
           {recents.length === 0 ? (
-            <div style={{ color: '#6b7280' }}>暂无最近项目</div>
+            <div className="noRecents">暂无最近项目</div>
           ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
+            <div className="recentItemsList">
               {recents.slice(0, 12).map(item => (
                 <button
                   key={item.path}
                   onClick={() => handleOpenRecent(item.path)}
                   title={item.path}
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    border: '1px solid #e5e7eb',
-                    background: '#fff',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
+                  className="recentItemButton"
                 >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                  <span className="recentItemPath">
                     {item.path}
                   </span>
-                  <span style={{ color: '#9ca3af', fontSize: 12 }}>
+                  <span className="recentItemDate">
                     {new Date(item.openedAt).toLocaleString()}
                   </span>
                 </button>
@@ -97,5 +90,3 @@ export default function HomePage(): React.JSX.Element {
     </div>
   )
 }
-
-
