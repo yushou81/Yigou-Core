@@ -1,7 +1,7 @@
 // src/router.tsx
-import { BrowserRouter, createBrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 //import App from '../App';
-import HomePage from '../components/HomePage';
+import HomePage from '../pages/HomePage';
 import Canvas from '@renderer/components/canvas/Canvas'
 //import AboutPage from './pages/AboutPage';
 //import NotFoundPage from './pages/NotFoundPage';

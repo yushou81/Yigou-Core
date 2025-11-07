@@ -1,11 +1,10 @@
 
 //import Canvas from './components/canvas/Canvas'
 //import HomePage from './pages/HomePage/HomePage'
-//import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import
 
 function App(): React.JSX.Element {
-  const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
+  //const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
 
   return (
     <>
@@ -15,7 +14,7 @@ function App(): React.JSX.Element {
 
     </div>
 
-  <Canvas/>
+
     </>
   )
 }
