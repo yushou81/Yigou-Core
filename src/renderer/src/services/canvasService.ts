@@ -266,8 +266,10 @@ export class CanvasService {
         // 兼容旧字段 startNodeId/endNodeId
         const sourceNodeId = s.sourceNodeId || s.startNodeId || null;
         const targetNodeId = s.targetNodeId || s.endNodeId || null;
+        // 显式删除 focused 属性，确保加载项目时所有箭头都是正常显示
+        const { focused, ...rest } = s;
         return {
-          ...s,
+          ...rest,
           type: 'arrow',
           points,
           sourceNodeId,
@@ -276,6 +278,7 @@ export class CanvasService {
           endNodeId: targetNodeId,
           sourceAttach: normalizeAttach(s.sourceAttach),
           targetAttach: normalizeAttach(s.targetAttach),
+          focused: false, // 明确设置为 false，确保初始时所有箭头都是正常显示
         };
       };
       const normalizeRectLike = (s: any) => ({
@@ -312,8 +315,24 @@ export class CanvasService {
       const normalizedShapes = (projectData.shapes as any[])
         .map(normalizeShape)
         .filter(Boolean);
+      
+      // 清除所有箭头的 focused 和 validationStatus 状态，确保箭头是实心的
+      const cleanedShapes = normalizedShapes.map((shape: any) => {
+        if (shape.type === 'arrow') {
+          const cleaned = { ...shape };
+          if (cleaned.focused !== undefined) {
+            cleaned.focused = false;
+          }
+          if (cleaned.validationStatus !== undefined) {
+            cleaned.validationStatus = null;
+          }
+          return cleaned;
+        }
+        return shape;
+      });
+      
       this.updateState({
-        shapes: normalizedShapes as any,
+        shapes: cleanedShapes as any,
         selectedShapeIds: [],
         isDrawing: false,
         drawingShape: null,

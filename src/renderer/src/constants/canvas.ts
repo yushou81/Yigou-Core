@@ -29,8 +29,8 @@ export const TOOL_CONFIGS: ToolConfig[] = [
       stroke: '#333',
       strokeWidth: 1,
       title: 'Node',
-      inputProps: [''],
-      outputProps: [''],
+      inputProps: [['']], // 多组输入：第一组
+      outputProps: [['']], // 多组输出：第一组
     },
   },
   {

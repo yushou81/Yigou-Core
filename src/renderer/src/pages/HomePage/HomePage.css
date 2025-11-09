@@ -9,166 +9,155 @@ body {
 }
 
 .homePageContainer {
-
-  background-image: linear-gradient(rgba(255, 255,255, 0.4), rgba(255, 255, 255, 1));
-  width: 100%;/*100vw;*/
-  height: 100%;/*100vh;*/
+  background-color: #ffffff;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #7777ff;
-
   overflow: hidden;
 }
 
 .homePageGrid {
-  width: 80%;/*960px*/
-  height: 80%;
- /* max-width: 92vw;*/
+  width: 90%;
+  max-width: 1200px;
   display: grid;
-  /* Responsive grid: 1 column on mobile, 2 on desktop */
   grid-template-columns: 1fr;
-  gap: 24px;
+  gap: 16px;
 }
 
 /* Media query for larger screens (e.g., tablets and desktops) */
 @media (min-width: 768px) {
   .homePageGrid {
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 280px 1fr;
   }
 }
 
 .card {
   background: #ffffff;
-  border-radius: 12px;
-  /* A slightly more modern, softer shadow */
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
-  padding: 24px;
+  border-radius: 0;
+  padding: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .cardTitle {
-  margin: 4px 0 20px 0;
-  font-size: 1.5rem; /* 24px */
+  margin: 0 0 12px 0;
+  font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
+  color: #0B3042;
 }
 
 .buttonGrid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .actionButton {
-  padding: 14px 18px;
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  background: #0095ff;
+  padding: 10px 14px;
+  border-radius: 0;
+  border: none;
+  background: #437C8F;
   text-align: left;
   cursor: pointer;
-  font-size: 1rem; /* 16px */
+  font-size: 0.9rem;
   font-weight: 500;
   color: #ffffff;
-  transition: all 0.2s ease-in-out;
+  transition: background-color 0.2s ease-in-out;
 }
 
 .actionButton:hover {
-  background-color: #6fc2e1; /* Light hover background */
-  border-color: #d1d5db;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); /* Subtle shadow on hover */
+  background-color: #0B3042;
 }
 
 .actionButton:focus-visible {
-  outline: 2px solid #3b82f6; /* Accessibility focus ring */
+  outline: 2px solid #0B3042;
   outline-offset: 2px;
 }
 
 .recentItemsList {
   display: grid;
-  gap: 8px;
-
-  /* --- 這就是您要的滾動列表 --- */
-  /* Sets a maximum height for the list */
-  max-height: 400px;
-  /* Adds a vertical scrollbar ONLY if content overflows */
+  gap: 6px;
+  max-height: 500px;
   overflow-y: auto;
-  /* --- 滾動列表結束 --- */
-
-  padding-right: 4px; /* For scrollbar space */
+  padding-right: 4px;
   flex-grow: 1;
 }
 
 .noRecents {
-  color: #6b7280;
-  font-size: 0.9rem;
-  padding: 20px 0;
+  color: #437C8F;
+  font-size: 0.85rem;
+  padding: 16px 0;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-grow: 1;
 }
-.recentItemButton {
-  /* --- 這確保了按鈕高度固定 --- */
-  /* Padding + flex centering ensures a consistent height */
-  padding: 30px 14px;
-  width: 100%;
-  height:  15%;
-  display: flex;
-  align-items: center; /* Vertically centers content */
-  overflow: hidden; /* Prevents long text from breaking layout */
-  /* --- 固定高度結束 --- */
 
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  /* ... other styles */
-}
-/*
 .recentItemButton {
-  padding: 12px 14px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 10px 12px;
   width: 100%;
-  transition: all 0.2s ease-in-out;
-  overflow: hidden; /* Ensure content doesn't break out
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid #d4d4d4;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
 }
-*/
+
 .recentItemButton:hover {
-  background-color: #ffffff;
-  border-color: #d1d5db;
+  background-color: #d4d4d4;
+  border-color: #437C8F;
 }
 
 .recentItemButton:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid #0B3042;
   outline-offset: 2px;
 }
-.recentItemPath {
-  overflow: hidden;
-  text-overflow: ellipsis; /* 如果路徑太長，顯示 "..." */
-  white-space: nowrap;   /* 保持路徑在同一行 */
-  max-width: 60%;      /* 路徑最大寬度 */
-}
-/*
+
 .recentItemPath {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 60%; /* Adjust as needed
-  font-size: 0.9rem;
-  color: #111827;
+  max-width: 60%;
+  color: #0B3042;
+  font-size: 0.85rem;
 }
-*/
+
 .recentItemDate {
-  color: #9ca3af;
-  font-size: 0.75rem; /* 12px */
+  color: #437C8F;
+  font-size: 0.7rem;
   white-space: nowrap;
-  margin-left: 16px;
+  margin-left: 12px;
+}
+
+.searchBox {
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d4d4d4;
+  background: #ffffff;
+  color: #0B3042;
+  font-size: 0.85rem;
+  border-radius: 0;
+  outline: none;
+  transition: border-color 0.2s ease-in-out;
+  box-sizing: border-box;
+}
+
+.searchInput:focus {
+  border-color: #437C8F;
+}
+
+.searchInput::placeholder {
+  color: #437C8F;
+  opacity: 0.6;
 }

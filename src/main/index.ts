@@ -124,9 +124,13 @@ app.whenReady().then(() => {
       }
       const data = await fs.readFile(filePath, 'utf-8')
       return { success: true, data, filePath }
-    } catch (error) {
+    } catch (error: any) {
       console.error('从路径加载失败:', error)
-      return { success: false, message: `加载失败: ${error}` }
+      // 检查是否是文件不存在的错误
+      if (error?.code === 'ENOENT' || error?.errno === -2) {
+        return { success: false, message: '文件不存在 (ENOENT)' }
+      }
+      return { success: false, message: `加载失败: ${error?.message || error}` }
     }
   })
 

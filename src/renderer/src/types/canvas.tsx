@@ -34,10 +34,12 @@ export interface ShapeData {
   
   // Node 特有属性
   description?: string; // 节点描述（仅画布渲染该描述，不再渲染输入输出）
-  inputProps?: string[]; // 输入属性列表
-  inputMode?: 'props' | 'custom'; // 输入渲染模式
-  outputProps?: string[]; // 输出属性列表
-  outputMode?: 'props' | 'custom' | 'api'; // 输出渲染模式
+  inputProps?: string[] | string[][]; // 输入属性列表（支持单组或多组：string[] 为向后兼容，string[][] 为多组输入）
+  inputMode?: 'props' | 'custom'; // 输入渲染模式（向后兼容，已废弃，使用inputModes）
+  inputModes?: ('props' | 'custom' | 'api')[]; // 每个输入组的独立输入模式（数组索引对应输入组索引）
+  outputProps?: string[] | string[][]; // 输出属性列表（支持单组或多组：string[] 为向后兼容，string[][] 为多组输出）
+  outputMode?: 'props' | 'custom' | 'api'; // 输出渲染模式（向后兼容，已废弃，使用outputModes）
+  outputModes?: ('props' | 'custom' | 'api')[]; // 每个输出组的独立输出模式（数组索引对应输出组索引）
   inputData?: Record<string, any>; // 自定义输入数据
   outputData?: Record<string, any>; // 自定义输出数据/运行结果
   inputDataEnabled?: boolean; // 是否启用自定义输入数据
@@ -45,13 +47,35 @@ export interface ShapeData {
   connectionPoints?: ConnectionPoint[]; // 连接点
   title?: string; // 节点标题
 
-  // Node API 配置（可选）
+  // Node API 配置（向后兼容，已废弃，使用outputApiConfigs）
   apiEnabled?: boolean; // 是否启用 API 调用
   apiUseAsOutput?: boolean; // 勾选后使用 API 结果作为输出
   apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'; // 调用方法
   apiUrl?: string; // 调用地址
   apiBody?: string; // 请求体（JSON 字符串）
   lastRunAt?: number; // 最近一次运行的时间戳
+  
+  // 每个输出组的独立API配置（数组索引对应输出组索引）
+  outputApiConfigs?: Array<{
+    apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    apiUrl?: string;
+    apiBody?: string;
+    lastRunAt?: number;
+  }>;
+  
+  // 每个输入组的独立API配置（数组索引对应输入组索引）
+  inputApiConfigs?: Array<{
+    apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    apiUrl?: string;
+    apiBody?: string;
+    lastRunAt?: number;
+  }>;
+  
+  // 每个输入组的自定义JSON数据（数组索引对应输入组索引）
+  inputDataGroups?: Record<string, any>[];
+  
+  // 每个输出组的自定义JSON数据（数组索引对应输出组索引）
+  outputDataGroups?: Record<string, any>[];
   
   // Arrow 特有属性
   startNodeId?: string; // 起始节点 ID

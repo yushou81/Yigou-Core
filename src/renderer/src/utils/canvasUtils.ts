@@ -54,8 +54,8 @@ export const createDefaultShape = (
         fill: '#ffffff',
         stroke: '#d0d0d0',
         title: 'Node',
-        inputProps: [''],
-        outputProps: [''],
+        inputProps: [['']], // 多组输入：第一组
+        outputProps: [['']], // 多组输出：第一组
         ...overrides,
       };
     case 'start':
@@ -68,7 +68,7 @@ export const createDefaultShape = (
         title: 'Start',
         // 起点仅需要输出
         inputProps: [],
-        outputProps: [''],
+        outputProps: [['']], // 多组输出：第一组
         ...overrides,
       };
     case 'container':
@@ -378,6 +378,94 @@ export const extractSnapPoints = (shapes: ShapeData[]): Array<{ x: number; y: nu
   
   return snapPoints;
 };
+
+/**
+ * 规范化输入/输出属性为多组格式（string[][]）
+ * 向后兼容：如果输入是 string[]，则转换为 [[...]] 格式
+ */
+export const normalizePropsToGroups = (props: string[] | string[][] | undefined): string[][] => {
+  if (!props) return [];
+  // 如果已经是二维数组，直接返回
+  if (Array.isArray(props) && props.length > 0 && Array.isArray(props[0])) {
+    return props as string[][];
+  }
+  // 如果是一维数组，转换为二维数组（向后兼容）
+  if (Array.isArray(props)) {
+    return [props as string[]];
+  }
+  return [];
+};
+
+/**
+ * 根据箭头的 order 获取对应的输入/输出组
+ * order 为 undefined 或 0 时使用第一组，1 时使用第二组，以此类推
+ */
+export const getPropsGroupByOrder = (props: string[] | string[][] | undefined, order: number | undefined): string[] => {
+  const groups = normalizePropsToGroups(props);
+  if (groups.length === 0) return [];
+  // order 为 undefined 时使用第一组（索引 0）
+  const index = order === undefined ? 0 : Math.max(0, order);
+  // 如果索引超出范围，使用最后一组
+  return groups[Math.min(index, groups.length - 1)] || [];
+};
+
+/**
+ * 替换字符串中的变量占位符
+ * 支持 ${inputData.key}, ${outputData.key}, ${inputDataGroups[0].key}, ${outputDataGroups[0].key} 等语法
+ */
+export function replaceVariablesInBody(
+  body: string,
+  context: {
+    inputData?: Record<string, any>;
+    outputData?: Record<string, any>;
+    inputDataGroups?: Record<string, any>[];
+    outputDataGroups?: Record<string, any>[];
+  }
+): string {
+  if (!body || typeof body !== 'string') return body;
+  
+  // 匹配 ${...} 格式的变量
+  return body.replace(/\$\{([^}]+)\}/g, (match, path) => {
+    try {
+      const parts = path.trim().split('.');
+      let value: any = context;
+      
+      for (const part of parts) {
+        // 处理数组索引，如 inputDataGroups[0]
+        const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          const arrayName = arrayMatch[1];
+          const index = parseInt(arrayMatch[2], 10);
+          if (value && value[arrayName] && Array.isArray(value[arrayName])) {
+            value = value[arrayName][index];
+          } else {
+            return match; // 变量不存在，返回原字符串
+          }
+        } else {
+          if (value && typeof value === 'object' && part in value) {
+            value = value[part];
+          } else {
+            return match; // 变量不存在，返回原字符串
+          }
+        }
+        
+        if (value === undefined || value === null) {
+          return match; // 变量值为空，返回原字符串
+        }
+      }
+      
+      // 如果值是对象或数组，转换为JSON字符串
+      if (typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      
+      return String(value);
+    } catch (e) {
+      // 解析失败，返回原字符串
+      return match;
+    }
+  });
+}
 
 /**
  * 查找坐标点离哪个形状的边框最近 (边框吸附)

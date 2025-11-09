@@ -29,7 +29,7 @@ import { Node } from '../shapes/Node';
 import { Start } from '../shapes/Start';
 import { GridBackground } from './GridBackground';
 import { PropertyPanel } from '../PropertyPanel';
-import { screenToWorld, clampCameraScale, findNearestPointOnShapeEdge } from '../../../utils/canvasUtils';
+import { screenToWorld, clampCameraScale, findNearestPointOnShapeEdge, normalizePropsToGroups, replaceVariablesInBody } from '../../../utils/canvasUtils';
 import { DEFAULT_CANVAS_SETTINGS } from '../../../constants/canvas';
 import { createDefaultShape } from '../../../utils/canvasUtils';
 import { ShapeType } from '../../../types/canvas';
@@ -366,14 +366,24 @@ export const Canvas: React.FC = () => {
       return;
     }
 
-    // 点击空白区域 - 只清除选择和关闭属性面板，不创建形状
+    // 点击空白区域 - 清除选择、关闭属性面板、重置箭头聚焦状态
     if (e.target === stage && !dragPreview) {
       clearSelection();
       
       // 关闭属性面板
       setSelectedShapeForProperties(null);
+      
+      // 清除所有箭头的 focused 状态，重置导航索引
+      const arrows = shapes.filter(s => s.type === 'arrow');
+      arrows.forEach(arrow => {
+        if ((arrow as any).focused) {
+          updateShape(arrow.id, { focused: false } as any);
+        }
+      });
+      (window as any).__arrowIdx = undefined;
+      (window as any).__lastFocusedArrowId = undefined;
     }
-  }, [clearSelection, dragPreview]);
+  }, [clearSelection, dragPreview, shapes, updateShape]);
 
   // 鼠标移动事件
   const handleMouseMove = useCallback((e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -668,9 +678,11 @@ export const Canvas: React.FC = () => {
   const handleSaveProject = useCallback(async () => {
     const result = await canvasService.saveProjectToFile();
     if (result.success) {
-      alert(`项目已保存到: ${result.filePath}`);
+      setToast(`项目已保存到: ${result.filePath}`);
+      setTimeout(() => setToast(null), 2000);
     } else {
-      alert(`保存失败: ${result.message || '未知错误'}`);
+      setToast(`保存失败: ${result.message || '未知错误'}`);
+      setTimeout(() => setToast(null), 2000);
     }
   }, []);
 
@@ -697,6 +709,8 @@ export const Canvas: React.FC = () => {
   const renderShape = useCallback((shape: any) => {
     const isSelected = selectedShapeIds.includes(shape.id);
     const isDragging = false; // 可以根据需要实现拖拽状态
+    // 检查是否有任何箭头处于 focused 状态
+    const hasAnyFocusedArrow = shapes.some(s => s.type === 'arrow' && (s as any).focused);
 
     // 取消缩小时隐藏容器内部元素与箭头的策略，避免看起来像被容器“覆盖”或箭头丢失
 
@@ -1111,6 +1125,7 @@ export const Canvas: React.FC = () => {
             onDragEnd={handleShapeDragEnd}
             onSelect={handleShapeSelect}
             onUpdatePoints={handleArrowPointsUpdate}
+            hasAnyFocusedArrow={hasAnyFocusedArrow}
           />
         );
       case 'node':
@@ -1352,7 +1367,7 @@ export const Canvas: React.FC = () => {
       default:
         return null;
     }
-  }, [selectedShapeIds, handleShapeDragEnd, handleShapeSelect, handleArrowPointsUpdate]);
+  }, [selectedShapeIds, handleShapeDragEnd, handleShapeSelect, handleArrowPointsUpdate, shapes]);
 
   return (
     <div className={`${styles.canvasContainer} ${isPanning ? styles.panning : ''}`}>
@@ -1368,10 +1383,13 @@ export const Canvas: React.FC = () => {
           if (!(window as any).__arrowIdx && (window as any).__arrowIdx !== 0) (window as any).__arrowIdx = 0;
           (window as any).__arrowIdx = Math.max(0, (window as any).__arrowIdx - 1);
           const target = ordered[(window as any).__arrowIdx];
-          // 高亮当前，取消上一个
-          if ((window as any).__lastFocusedArrowId && (window as any).__lastFocusedArrowId !== target.id) {
-            updateShape((window as any).__lastFocusedArrowId, { focused: false } as any);
-          }
+          // 清除所有箭头的 focused 状态，然后只聚焦当前箭头
+          const allArrows = shapes.filter(s => s.type === 'arrow');
+          allArrows.forEach(arrow => {
+            if ((arrow as any).focused) {
+              updateShape(arrow.id, { focused: false } as any);
+            }
+          });
           updateShape(target.id, { focused: true } as any);
           (window as any).__lastFocusedArrowId = target.id;
           const pts = target.points || [0, 0, 0, 0];
@@ -1404,9 +1422,13 @@ export const Canvas: React.FC = () => {
           if (!(window as any).__arrowIdx && (window as any).__arrowIdx !== 0) (window as any).__arrowIdx = -1;
           (window as any).__arrowIdx = Math.min(ordered.length - 1, (window as any).__arrowIdx + 1);
           const target = ordered[(window as any).__arrowIdx];
-          if ((window as any).__lastFocusedArrowId && (window as any).__lastFocusedArrowId !== target.id) {
-            updateShape((window as any).__lastFocusedArrowId, { focused: false } as any);
-          }
+          // 清除所有箭头的 focused 状态，然后只聚焦当前箭头
+          const allArrows = shapes.filter(s => s.type === 'arrow');
+          allArrows.forEach(arrow => {
+            if ((arrow as any).focused) {
+              updateShape(arrow.id, { focused: false } as any);
+            }
+          });
           updateShape(target.id, { focused: true } as any);
           (window as any).__lastFocusedArrowId = target.id;
           const pts = target.points || [0, 0, 0, 0];
@@ -1441,42 +1463,81 @@ export const Canvas: React.FC = () => {
           const shapesNow = [...shapes];
           const nodesById = new Map(shapesNow.filter(s => s.type === 'node' || s.type === 'start').map(s => [s.id, s]));
           const arrowsNow = shapesNow.filter(s => s.type === 'arrow');
-          const outgoing = new Map<string, any[]>(
-            [...nodesById.keys()].map(id => [id, arrowsNow.filter(a => (a as any).sourceNodeId === id || (a as any).startNodeId === id)])
-          );
 
           // 解析 API 返回结果，转换为对象结构（类似 Spring Boot 的 @ResponseBody）
           const parseApiResult = (apiResult: any): Record<string, any> => {
-            if (!apiResult) return {};
+            console.log(`[PARSE_API] 开始解析 API 结果:`, apiResult);
+            console.log(`[PARSE_API] API 结果类型:`, typeof apiResult, Array.isArray(apiResult) ? '(数组)' : '');
+            
+            if (!apiResult) {
+              console.log(`[PARSE_API] API 结果为空，返回空对象`);
+              return {};
+            }
+            
             // 如果是对象，直接使用
             if (typeof apiResult === 'object' && !Array.isArray(apiResult)) {
+              const keys = Object.keys(apiResult);
+              console.log(`[PARSE_API] API 结果是对象，直接使用。包含的键:`, keys);
               return apiResult;
             }
+            
             // 如果是数组，提取第一个元素作为主要数据（常见场景：API 返回 [{...}]）
             if (Array.isArray(apiResult)) {
-              return apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
+              const result = apiResult.length > 0 ? { ...apiResult[0], _array: apiResult } : {};
+              console.log(`[PARSE_API] API 结果是数组，提取第一个元素。数组长度:`, apiResult.length, '提取的键:', Object.keys(result));
+              return result;
             }
+            
             // 如果是字符串，尝试解析 JSON
             if (typeof apiResult === 'string') {
               try {
                 const parsed = JSON.parse(apiResult);
+                console.log(`[PARSE_API] API 结果是字符串，解析 JSON 成功:`, parsed);
                 return parseApiResult(parsed); // 递归处理解析后的结果
               } catch {
+                console.log(`[PARSE_API] API 结果是字符串，但无法解析 JSON，包装为 {value: ...}`);
                 return { value: apiResult };
               }
             }
+            
             // 其他类型，包装成对象
+            console.log(`[PARSE_API] API 结果是其他类型，包装为 {value: ...}`);
             return { value: apiResult };
           };
 
           // 获取节点的输出数据（类似 Spring Boot 的返回对象）
-          const getOutputData = (node: any): Record<string, any> => {
-            const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
+          const getOutputData = (node: any, order?: number): Record<string, any> => {
+            // 根据箭头的 order 确定输出组索引
+            // 获取所有从该节点出发的箭头，按 order 排序，找到当前箭头的位置
+            let groupIndex = 0;
+            if (typeof order === 'number') {
+              const outgoingArrows = arrowsNow.filter((a: any) => 
+                (a as any).sourceNodeId === node.id || (a as any).startNodeId === node.id
+              );
+              const sortedOutgoing = [...outgoingArrows].sort((a: any, b: any) => {
+                const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                return ao - bo;
+              });
+              const currentIndex = sortedOutgoing.findIndex((a: any) => a.order === order);
+              groupIndex = currentIndex >= 0 ? currentIndex : 0;
+            }
+            
+            // 获取对应输出组的模式
+            let mode: 'props' | 'custom' | 'api' = 'props';
+            if (node.outputModes && Array.isArray(node.outputModes) && node.outputModes[groupIndex]) {
+              mode = node.outputModes[groupIndex];
+            } else {
+              // 向后兼容：使用全局 outputMode
+              mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
+            }
             
             if (mode === 'props') {
               // Props 模式：从 outputProps 和 outputData 构建数据对象
               // 类似 Spring Boot 的 @ResponseBody，返回的是键值对
-              const props = (node.outputProps || []).filter((k: string) => !!k);
+              // 使用计算出的 groupIndex 来选择对应的输出组
+              const outputPropsGroups = normalizePropsToGroups(node.outputProps);
+              const props = (outputPropsGroups[groupIndex] || []).filter((k: string) => !!k);
               const data: Record<string, any> = {};
               props.forEach((prop: string) => {
                 // 优先从 outputData 中获取值
@@ -1489,10 +1550,28 @@ export const Canvas: React.FC = () => {
             
             if (mode === 'api') {
               // API 模式：解析 API 返回结果
-              const apiResult = node.outputData?.apiResult;
+              // 从outputData中获取对应输出组的API结果
+              console.log(`[GET_OUTPUT] 节点 ${node.id} (${node.title || node.id}) 输出组 ${groupIndex + 1} 使用 API 模式`);
+              console.log(`[GET_OUTPUT] 节点 outputData:`, node.outputData);
+              console.log(`[GET_OUTPUT] 查找 apiResult_${groupIndex}:`, node.outputData?.[`apiResult_${groupIndex}`]);
+              
+              const apiResult = node.outputData?.[`apiResult_${groupIndex}`];
               if (apiResult) {
-                return parseApiResult(apiResult);
+                const parsed = parseApiResult(apiResult);
+                console.log(`[GET_OUTPUT] 找到按组存储的 API 结果，解析后:`, parsed);
+                console.log(`[GET_OUTPUT] 解析后的所有键:`, Object.keys(parsed));
+                return parsed;
               }
+              
+              // 向后兼容：如果没有按组存储的结果，尝试使用全局apiResult
+              const globalApiResult = node.outputData?.apiResult;
+              if (globalApiResult) {
+                console.log(`[GET_OUTPUT] 找到全局 API 结果，解析后:`, parseApiResult(globalApiResult));
+                return parseApiResult(globalApiResult);
+              }
+              
+              console.warn(`[GET_OUTPUT] ⚠️ 节点 ${node.id} 输出组 ${groupIndex + 1} 没有找到 API 结果！`);
+              console.log(`[GET_OUTPUT] outputData 的所有键:`, node.outputData ? Object.keys(node.outputData) : 'outputData 为空');
               return {};
             }
             
@@ -1539,21 +1618,63 @@ export const Canvas: React.FC = () => {
           };
 
           // 验证数据匹配（类似 Spring Boot 的参数绑定验证）
-          const validateDataMatch = (sourceData: Record<string, any>, targetNode: any, sourceNode: any): { match: boolean; missing: string[]; message: string } => {
-            const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+          const validateDataMatch = (sourceData: Record<string, any>, targetNode: any, sourceNode: any, order?: number): { match: boolean; missing: string[]; message: string } => {
+            // 根据箭头的 order 确定输入组索引
+            // 获取所有指向目标节点的箭头，按 order 排序，找到当前箭头的位置
+            let groupIndex = 0;
+            if (typeof order === 'number') {
+              const incomingArrows = arrowsNow.filter((a: any) => 
+                ((a as any).targetNodeId === targetNode.id || (a as any).endNodeId === targetNode.id)
+              );
+              const sortedIncoming = [...incomingArrows].sort((a: any, b: any) => {
+                const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                return ao - bo;
+              });
+              const currentIndex = sortedIncoming.findIndex((a: any) => a.order === order);
+              groupIndex = currentIndex >= 0 ? currentIndex : 0;
+            }
+            
+            // 获取对应输入组的模式
+            let mode: 'props' | 'custom' | 'api' = 'props';
+            if (targetNode.inputModes && Array.isArray(targetNode.inputModes) && targetNode.inputModes[groupIndex]) {
+              mode = targetNode.inputModes[groupIndex];
+            } else {
+              // 向后兼容：使用全局 inputMode
+              mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+            }
             
             if (mode === 'props') {
               // Props 模式：类似 @RequestParam，基于属性名的精确匹配
               // 只验证属性名是否匹配，不验证值是否存在
-              const requiredProps = (targetNode.inputProps || []).filter((k: string) => !!k);
+              // 使用计算出的 groupIndex 来选择对应的输入组
+              const inputPropsGroups = normalizePropsToGroups(targetNode.inputProps);
+              const requiredProps = (inputPropsGroups[groupIndex] || []).filter((k: string) => !!k);
               
               // 获取源节点的输出属性列表（属性名列表）
-              const sourceOutputMode = sourceNode.outputMode || (sourceNode.outputDataEnabled ? 'custom' : (sourceNode.apiUseAsOutput ? 'api' : 'props'));
+              // 根据箭头的 order 确定输出组索引
+              const outgoingArrows = arrowsNow.filter((a: any) => (a as any).sourceNodeId === sourceNode.id || (a as any).startNodeId === sourceNode.id);
+              const sortedOutgoing = [...outgoingArrows].sort((a: any, b: any) => {
+                const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                return ao - bo;
+              });
+              const currentIndex = sortedOutgoing.findIndex((a: any) => a.order === order);
+              const sourceGroupIndex = currentIndex >= 0 ? currentIndex : 0;
+              
+              let sourceOutputMode: 'props' | 'custom' | 'api' = 'props';
+              if (sourceNode.outputModes && Array.isArray(sourceNode.outputModes) && sourceNode.outputModes[sourceGroupIndex]) {
+                sourceOutputMode = sourceNode.outputModes[sourceGroupIndex];
+              } else {
+                sourceOutputMode = sourceNode.outputMode || (sourceNode.outputDataEnabled ? 'custom' : (sourceNode.apiUseAsOutput ? 'api' : 'props'));
+              }
+              
               let sourceOutputProps: string[] = [];
               
               if (sourceOutputMode === 'props') {
-                // Props 模式：直接从 outputProps 获取属性名列表
-                sourceOutputProps = (sourceNode.outputProps || []).filter((k: string) => !!k);
+                // Props 模式：使用计算出的 sourceGroupIndex 来选择对应的输出组
+                const outputPropsGroups = normalizePropsToGroups(sourceNode.outputProps);
+                sourceOutputProps = (outputPropsGroups[sourceGroupIndex] || []).filter((k: string) => !!k);
               } else if (sourceOutputMode === 'api') {
                 // API 模式：从解析后的数据中获取属性名
                 sourceOutputProps = Object.keys(sourceData).filter(k => k !== '_array');
@@ -1562,12 +1683,36 @@ export const Canvas: React.FC = () => {
                 sourceOutputProps = Object.keys(sourceData);
               }
               
+              // 调试日志
+              console.log(`[VALIDATE] ========== 开始验证数据匹配 ==========`);
+              console.log(`[VALIDATE] 目标节点: ${targetNode.id} (${targetNode.title || targetNode.id})`);
+              console.log(`[VALIDATE] 目标节点输入组 ${groupIndex + 1} 需要的属性:`, requiredProps);
+              console.log(`[VALIDATE] 需要的属性数量:`, requiredProps.length);
+              console.log(`[VALIDATE] 源节点: ${sourceNode.id} (${sourceNode.title || sourceNode.id})`);
+              console.log(`[VALIDATE] 源节点输出组 ${sourceGroupIndex + 1} 模式:`, sourceOutputMode);
+              console.log(`[VALIDATE] 源节点输出组提供的属性:`, sourceOutputProps);
+              console.log(`[VALIDATE] 提供的属性数量:`, sourceOutputProps.length);
+              console.log(`[VALIDATE] 源节点输出数据 (sourceData):`, sourceData);
+              console.log(`[VALIDATE] sourceData 的所有键:`, Object.keys(sourceData));
+              
               const sourcePropsSet = new Set(sourceOutputProps);
+              console.log(`[VALIDATE] 源属性集合 (Set):`, Array.from(sourcePropsSet));
+              
               const missing = requiredProps.filter(prop => !sourcePropsSet.has(prop));
+              console.log(`[VALIDATE] 缺失的属性:`, missing);
+              
+              // 详细检查每个需要的属性
+              requiredProps.forEach(prop => {
+                const hasProp = sourcePropsSet.has(prop);
+                const propValue = sourceData[prop];
+                console.log(`[VALIDATE]   属性 "${prop}": ${hasProp ? '✅ 存在' : '❌ 缺失'} ${hasProp ? `(值: ${JSON.stringify(propValue)})` : ''}`);
+              });
               
               if (missing.length === 0) {
+                console.log(`[VALIDATE] ✅ 匹配成功！所有属性都存在`);
                 return { match: true, missing: [], message: '参数匹配成功' };
               }
+              console.log(`[VALIDATE] ❌ 匹配失败！缺少 ${missing.length} 个属性: ${missing.join(', ')}`);
               return { 
                 match: false, 
                 missing, 
@@ -1575,8 +1720,22 @@ export const Canvas: React.FC = () => {
               };
             }
             
+            if (mode === 'api') {
+              // API 模式：API 输入会在运行前执行，这里暂时允许通过
+              // 实际验证会在 API 调用后通过 props 或 custom 模式进行
+              return { match: true, missing: [], message: 'API 输入模式（将在 API 调用后验证）' };
+            }
+            
             // Custom 模式：类似 @RequestBody，递归检查对象结构
-            const expectedStructure = targetNode.inputData;
+            // 从 inputDataGroups 中获取对应组的 JSON 数据
+            let expectedStructure: any = null;
+            if (targetNode.inputDataGroups && Array.isArray(targetNode.inputDataGroups) && targetNode.inputDataGroups[groupIndex]) {
+              expectedStructure = targetNode.inputDataGroups[groupIndex];
+            } else {
+              // 向后兼容：使用全局 inputData
+              expectedStructure = targetNode.inputData;
+            }
+            
             if (expectedStructure && typeof expectedStructure === 'object' && !Array.isArray(expectedStructure)) {
               const result = checkStructureMatch(sourceData, expectedStructure);
               return {
@@ -1606,50 +1765,148 @@ export const Canvas: React.FC = () => {
             return [];
           };
 
-          // 运行API获取输出数据
+          // 运行API获取输出数据（支持每个输出组的独立API配置）
           const runApiIfNeeded = async (node: any) => {
-            const mode = node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props'));
-            if (mode !== 'api') return;
-            if (!node.apiEnabled || !node.apiUrl) return;
+            // 获取所有输出组
+            const outputGroups = normalizePropsToGroups(node.outputProps);
+            if (outputGroups.length === 0) return;
+            
+            // 获取输出模式数组
+            const outputModes = node.outputModes || [];
+            // 获取API配置数组
+            const outputApiConfigs = node.outputApiConfigs || [];
+            
+            // 为每个输出组运行API（如果需要）
+            for (let groupIndex = 0; groupIndex < outputGroups.length; groupIndex++) {
+              // 获取该输出组的模式
+              const mode = outputModes[groupIndex] || 
+                          (node.outputMode || (node.outputDataEnabled ? 'custom' : (node.apiUseAsOutput ? 'api' : 'props')));
+              
+              // 如果该组不是API模式，跳过
+              if (mode !== 'api') continue;
+              
+              // 获取该组的API配置
+              const apiConfig = outputApiConfigs[groupIndex];
+              
+              // 向后兼容：如果没有按组配置，使用全局配置
+              const config = apiConfig || {
+                apiMethod: node.apiMethod || 'GET',
+                apiUrl: node.apiUrl || '',
+                apiBody: node.apiBody || '',
+              };
+              
+              // 如果没有配置URL，跳过
+              if (!config.apiUrl) continue;
+              
             try {
-              const method = node.apiMethod || 'GET';
+                const method = config.apiMethod || 'GET';
               const headers: Record<string, string> = { 'Content-Type': 'application/json' };
               const init: RequestInit = { method, headers };
-              if (method !== 'GET' && node.apiBody) init.body = node.apiBody;
-              const res = await fetch(node.apiUrl, init);
+                if (method !== 'GET' && config.apiBody) {
+                  // 替换Body中的变量
+                  const bodyWithVars = replaceVariablesInBody(config.apiBody, {
+                    inputData: node.inputData,
+                    outputData: node.outputData,
+                    inputDataGroups: node.inputDataGroups,
+                    outputDataGroups: node.outputDataGroups,
+                  });
+                  init.body = bodyWithVars;
+                }
+                
+                console.log(`[API_CALL] 节点 ${node.id} (${node.title || node.id}) 输出组 ${groupIndex + 1} 调用API: ${method} ${config.apiUrl}`);
+                
+                const res = await fetch(config.apiUrl, init);
               const text = await res.text();
-              let data: any = text; try { data = JSON.parse(text); } catch {}
-              const newOutput = { ...(node.outputData || {}), apiResult: data };
-              updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
+                console.log(`[API_CALL] API 响应状态:`, res.status, res.statusText);
+                console.log(`[API_CALL] API 响应原始文本:`, text);
+                
+                let data: any = text;
+                try { 
+                  data = JSON.parse(text);
+                  console.log(`[API_CALL] API 响应解析为 JSON 成功:`, data);
+                } catch (e) {
+                  console.log(`[API_CALL] API 响应无法解析为 JSON，保持为字符串`);
+                }
+                
+                // 将API结果存储到对应输出组
+                const newOutput = { ...(node.outputData || {}) };
+                newOutput[`apiResult_${groupIndex}`] = data;
+                console.log(`[API_CALL] 存储 API 结果到 outputData['apiResult_${groupIndex}']:`, data);
+                console.log(`[API_CALL] 更新后的 outputData 所有键:`, Object.keys(newOutput));
+                
+                // 更新该组的lastRunAt
+                const newConfigs = [...outputApiConfigs];
+                if (!newConfigs[groupIndex]) {
+                  newConfigs[groupIndex] = { apiMethod: 'GET', apiUrl: '', apiBody: '' };
+                }
+                newConfigs[groupIndex] = { ...newConfigs[groupIndex], lastRunAt: Date.now() };
+                
+                updateShape(node.id, { 
+                  outputData: newOutput, 
+                  outputApiConfigs: newConfigs,
+                });
               node.outputData = newOutput;
+                node.outputApiConfigs = newConfigs;
               
-              // 如果使用 API 作为输出，并且是 props 模式，自动提取属性名
-              if (mode === 'api' || mode === 'props') {
+                // 如果使用 API 作为输出，自动提取属性名
                 const parsedData = parseApiResult(data);
                 const properties = extractProperties(parsedData);
                 if (properties.length > 0) {
-                  // 提取属性名并更新 outputProps（只添加新的属性，保留已有的）
-                  const existingProps = (node.outputProps || []).filter(p => !!p);
-                  const newProps = [...new Set([...existingProps, ...properties])]; // 去重合并
+                  // 提取属性名并更新对应输出组的 outputProps（只添加新的属性，保留已有的）
+                  const existingGroups = normalizePropsToGroups(node.outputProps);
+                  const currentGroup = existingGroups[groupIndex] || [];
+                  const existingProps = currentGroup.filter(p => !!p);
+                  const newGroup = [...new Set([...existingProps, ...properties])]; // 去重合并
+                  const newProps = [...existingGroups];
+                  newProps[groupIndex] = newGroup;
                   updateShape(node.id, { outputProps: newProps });
                   node.outputProps = newProps;
                 }
-              }
+                
+                console.log(`[RUN] 节点 ${node.id} 输出组 ${groupIndex + 1} API调用成功`);
             } catch (e) {
-              const newOutput = { ...(node.outputData || {}), apiError: String(e) };
-              updateShape(node.id, { outputData: newOutput, lastRunAt: Date.now() });
+                console.error(`[RUN] 节点 ${node.id} 输出组 ${groupIndex + 1} API调用失败:`, e);
+                const newOutput = { ...(node.outputData || {}) };
+                newOutput[`apiError_${groupIndex}`] = String(e);
+                updateShape(node.id, { outputData: newOutput });
               node.outputData = newOutput;
+              }
             }
           };
 
           // 传递数据到目标节点（类似 Spring Boot 的参数绑定）
-          const passDataToTarget = (sourceData: Record<string, any>, targetNode: any) => {
-            const mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+          const passDataToTarget = (sourceData: Record<string, any>, targetNode: any, order?: number) => {
+            // 根据箭头的 order 确定输入组索引
+            // 获取所有指向目标节点的箭头，按 order 排序，找到当前箭头的位置
+            let groupIndex = 0;
+            if (typeof order === 'number') {
+              const incomingArrows = arrowsNow.filter((a: any) => 
+                ((a as any).targetNodeId === targetNode.id || (a as any).endNodeId === targetNode.id)
+              );
+              const sortedIncoming = [...incomingArrows].sort((a: any, b: any) => {
+                const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                return ao - bo;
+              });
+              const currentIndex = sortedIncoming.findIndex((a: any) => a.order === order);
+              groupIndex = currentIndex >= 0 ? currentIndex : 0;
+            }
+            
+            // 获取对应输入组的模式
+            let mode: 'props' | 'custom' | 'api' = 'props';
+            if (targetNode.inputModes && Array.isArray(targetNode.inputModes) && targetNode.inputModes[groupIndex]) {
+              mode = targetNode.inputModes[groupIndex];
+            } else {
+              // 向后兼容：使用全局 inputMode
+              mode = targetNode.inputMode || (targetNode.inputDataEnabled ? 'custom' : 'props');
+            }
             
             if (mode === 'props') {
               // Props 模式：类似 @RequestParam，按属性名精确绑定
-              const inputProps = (targetNode.inputProps || []).filter((k: string) => !!k);
-              const newInputData: Record<string, any> = {};
+              // 使用计算出的 groupIndex 来选择对应的输入组
+              const inputPropsGroups = normalizePropsToGroups(targetNode.inputProps);
+              const inputProps = (inputPropsGroups[groupIndex] || []).filter((k: string) => !!k);
+              const newInputData: Record<string, any> = { ...(targetNode.inputData || {}) };
               inputProps.forEach((prop: string) => {
                 // 自动绑定：如果源数据有对应属性，就传递；否则传递 undefined（用户可以在节点内设置默认值）
                 if (sourceData[prop] !== undefined) {
@@ -1658,10 +1915,22 @@ export const Canvas: React.FC = () => {
               });
               updateShape(targetNode.id, { inputData: newInputData });
               targetNode.inputData = newInputData;
+            } else if (mode === 'api') {
+              // API 模式：API 输入会在运行前执行，这里暂时不处理数据传递
+              // 实际数据传递会在 API 调用后通过 props 或 custom 模式进行
+              // 但我们可以将 API 结果存储到 inputDataGroups 中
+              // 注意：这里不传递数据，因为 API 输入会在 runApiIfNeeded 中处理
             } else {
               // Custom 模式：类似 @RequestBody，传递完整对象
-              // 如果目标定义了期望结构，只传递匹配的部分；否则传递全部
-              const expectedStructure = targetNode.inputData;
+              // 从 inputDataGroups 中获取对应组的 JSON 数据作为期望结构
+              let expectedStructure: any = null;
+              if (targetNode.inputDataGroups && Array.isArray(targetNode.inputDataGroups) && targetNode.inputDataGroups[groupIndex]) {
+                expectedStructure = targetNode.inputDataGroups[groupIndex];
+              } else {
+                // 向后兼容：使用全局 inputData
+                expectedStructure = targetNode.inputData;
+              }
+              
               if (expectedStructure && typeof expectedStructure === 'object' && !Array.isArray(expectedStructure)) {
                 // 只传递期望结构中定义的字段（保持嵌套结构）
                 const extractMatchingFields = (source: any, target: any): any => {
@@ -1684,12 +1953,34 @@ export const Canvas: React.FC = () => {
                   return result;
                 };
                 const matchedData = extractMatchingFields(sourceData, expectedStructure);
-                updateShape(targetNode.id, { inputData: matchedData });
-                targetNode.inputData = matchedData;
+                
+                // 更新 inputDataGroups
+                const newInputDataGroups = [...(targetNode.inputDataGroups || [])];
+                while (newInputDataGroups.length <= groupIndex) {
+                  newInputDataGroups.push({});
+                }
+                newInputDataGroups[groupIndex] = matchedData;
+                
+                updateShape(targetNode.id, { 
+                  inputData: { ...(targetNode.inputData || {}), ...matchedData },
+                  inputDataGroups: newInputDataGroups,
+                });
+                targetNode.inputData = { ...(targetNode.inputData || {}), ...matchedData };
+                targetNode.inputDataGroups = newInputDataGroups;
               } else {
                 // 没有期望结构，传递全部数据
-                updateShape(targetNode.id, { inputData: { ...sourceData } });
-                targetNode.inputData = { ...sourceData };
+                const newInputDataGroups = [...(targetNode.inputDataGroups || [])];
+                while (newInputDataGroups.length <= groupIndex) {
+                  newInputDataGroups.push({});
+                }
+                newInputDataGroups[groupIndex] = { ...sourceData };
+                
+                updateShape(targetNode.id, { 
+                  inputData: { ...(targetNode.inputData || {}), ...sourceData },
+                  inputDataGroups: newInputDataGroups,
+                });
+                targetNode.inputData = { ...(targetNode.inputData || {}), ...sourceData };
+                targetNode.inputDataGroups = newInputDataGroups;
               }
             }
           };
@@ -1705,71 +1996,259 @@ export const Canvas: React.FC = () => {
             });
           };
 
-          // 从起点开始遍历（顺序执行，等待每个箭头动画完成）
-          const starts = shapesNow.filter(s => s.type === 'start');
-          for (const start of starts) {
-            const queue: Array<{ nodeId: string; sourceNode?: any }> = [{ nodeId: start.id }];
-            const visited = new Set<string>();
-            
-            while (queue.length) {
-              const { nodeId: currentId } = queue.shift()!;
-              if (visited.has(currentId)) continue;
-              visited.add(currentId);
-              const currentNode = nodesById.get(currentId);
-              if (!currentNode) continue;
-
-              // 运行API获取输出（如果需要）
-              await runApiIfNeeded(currentNode);
-
-              // 获取源节点的输出数据
-              const sourceOutputData = getOutputData(currentNode);
-
-              // 处理所有从当前节点出发的箭头（按顺序，等待每个动画完成）
-              const outs = outgoing.get(currentId) || [];
-          // 根据箭头的 order 字段进行排序：数值越小越先运行；未设置的排在最后，保持原有相对顺序
-          const sortedOuts = [...outs].sort((a: any, b: any) => {
+          // 按箭头 order 顺序运行
+          // 1. 收集所有箭头，按 order 排序
+          const allArrows = arrowsNow.filter(a => {
+            const sourceId = (a as any).sourceNodeId || (a as any).startNodeId;
+            const targetId = (a as any).targetNodeId || (a as any).endNodeId;
+            return sourceId && targetId; // 只处理已连接的箭头
+          });
+          
+          // 按 order 排序：数值越小越先运行；未设置的排在最后
+          const sortedArrows = [...allArrows].sort((a: any, b: any) => {
             const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
             const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
             if (ao === bo) return 0;
             return ao - bo;
           });
-          for (const arr of sortedOuts) {
-                const arrowId = arr.id;
-                const targetId = (arr as any).targetNodeId || (arr as any).endNodeId;
-                if (!targetId) {
-                  // 箭头未连接到目标，标记为错误并等待动画
+
+          // 2. 构建依赖关系：记录每个节点的输入箭头和输出箭头
+          const incomingArrows = new Map<string, any[]>(); // 指向节点的箭头
+          const outgoingArrows = new Map<string, any[]>(); // 从节点出发的箭头
+          
+          sortedArrows.forEach((arrow: any) => {
+            const sourceId = arrow.sourceNodeId || arrow.startNodeId;
+            const targetId = arrow.targetNodeId || arrow.endNodeId;
+            
+            if (sourceId) {
+              if (!outgoingArrows.has(sourceId)) {
+                outgoingArrows.set(sourceId, []);
+              }
+              outgoingArrows.get(sourceId)!.push(arrow);
+            }
+            
+            if (targetId) {
+              if (!incomingArrows.has(targetId)) {
+                incomingArrows.set(targetId, []);
+              }
+              incomingArrows.get(targetId)!.push(arrow);
+            }
+          });
+
+          // 3. 跟踪每个节点的输入箭头完成情况
+          const nodeInputCompleted = new Map<string, Set<string>>(); // nodeId -> 已完成的输入箭头ID集合
+          const nodeReadyForOutput = new Map<string, boolean>(); // nodeId -> 是否准备好输出（所有输入箭头都已完成）
+          
+          // 初始化：起点节点没有输入箭头，可以直接输出
+          const starts = shapesNow.filter(s => s.type === 'start');
+          for (const start of starts) {
+            nodeReadyForOutput.set(start.id, true);
+            nodeInputCompleted.set(start.id, new Set());
+            // 为起点节点调用 API（如果需要）- 等待完成以确保数据可用
+            const startNode = nodesById.get(start.id);
+            if (startNode) {
+              try {
+                await runApiIfNeeded(startNode);
+                // 更新节点数据（因为 API 调用后节点数据已更新）
+                const updatedStartNode = nodesById.get(start.id);
+                if (updatedStartNode) {
+                  Object.assign(startNode, updatedStartNode);
+                }
+              } catch (err) {
+                console.error(`[RUN] 起点节点 ${start.id} API 调用失败:`, err);
+              }
+            }
+          }
+          
+          // 初始化：没有输入箭头的节点可以直接输出
+          for (const [nodeId, _node] of nodesById) {
+            const inputArrows = incomingArrows.get(nodeId) || [];
+            if (inputArrows.length === 0) {
+              nodeReadyForOutput.set(nodeId, true);
+              nodeInputCompleted.set(nodeId, new Set());
+              // 为没有输入箭头的节点调用 API（如果需要）- 等待完成以确保数据可用
+              const node = nodesById.get(nodeId);
+              if (node) {
+                try {
+                  await runApiIfNeeded(node);
+                  // 更新节点数据（因为 API 调用后节点数据已更新）
+                  const updatedNode = nodesById.get(nodeId);
+                  if (updatedNode) {
+                    Object.assign(node, updatedNode);
+                  }
+                } catch (err) {
+                  console.error(`[RUN] 节点 ${nodeId} API 调用失败:`, err);
+                }
+              }
+            }
+          }
+
+          // 4. 按 order 顺序运行箭头（循环处理，直到所有可运行的箭头都完成）
+          const completedArrows = new Set<string>(); // 已完成的箭头ID集合
+          let hasProgress = true; // 是否在本轮循环中有进展
+          let iterationCount = 0; // 循环次数，防止无限循环
+          const maxIterations = sortedArrows.length * 2; // 最大循环次数
+          
+          while (hasProgress && iterationCount < maxIterations) {
+            hasProgress = false;
+            iterationCount++;
+            console.log(`[RUN] 开始第 ${iterationCount} 轮循环，已完成箭头数: ${completedArrows.size}/${sortedArrows.length}`);
+            
+            for (const arrow of sortedArrows) {
+              const arrowId = arrow.id;
+
+              // 如果箭头已经完成，跳过
+              if (completedArrows.has(arrowId)) {
+                continue;
+              }
+
+              const sourceId = (arrow as any).sourceNodeId || (arrow as any).startNodeId;
+              const targetId = (arrow as any).targetNodeId || (arrow as any).endNodeId;
+              const arrowOrder = (arrow as any).order;
+
+              if (!sourceId || !targetId) {
+                // 箭头未连接完整，标记为错误
                   await waitForArrowAnimation(arrowId, 'error');
+                completedArrows.add(arrowId);
+                hasProgress = true;
                   continue;
                 }
 
+              const sourceNode = nodesById.get(sourceId);
                 const targetNode = nodesById.get(targetId);
-                if (!targetNode) {
+
+              if (!sourceNode || !targetNode) {
+                // 节点不存在，标记为错误
                   await waitForArrowAnimation(arrowId, 'error');
+                completedArrows.add(arrowId);
+                hasProgress = true;
+                continue;
+              }
+
+              // 检查源节点是否准备好输出
+              const sourceReady = nodeReadyForOutput.get(sourceId) || false;
+              if (!sourceReady) {
+                // 源节点还没准备好，跳过这个箭头（会在后续循环中处理）
+                const sourceInputArrows = incomingArrows.get(sourceId) || [];
+                const sourceCompletedInputs = nodeInputCompleted.get(sourceId) || new Set();
+                console.log(`[RUN] 跳过箭头 ${arrowId} (order=${arrowOrder}): 源节点 ${sourceId} 尚未准备好 (输入箭头: ${sourceCompletedInputs.size}/${sourceInputArrows.length})`);
                   continue;
                 }
 
                 // 标记箭头为验证中
                 updateShape(arrowId, { validationStatus: 'pending' });
 
-                // 验证数据匹配（类似 Spring Boot 的参数绑定验证）
-                const validation = validateDataMatch(sourceOutputData, targetNode, currentNode);
+              // 确保源节点的 API 已经被调用（如果是 API 模式）
+              // 根据箭头的 order 确定输出组索引
+              const outgoingArrows = arrowsNow.filter((a: any) => (a as any).sourceNodeId === sourceNode.id || (a as any).startNodeId === sourceNode.id);
+              const sortedOutgoing = [...outgoingArrows].sort((a: any, b: any) => {
+                const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                return ao - bo;
+              });
+              const currentIndex = sortedOutgoing.findIndex((a: any) => a.order === arrowOrder);
+              const groupIndex = currentIndex >= 0 ? currentIndex : 0;
+              
+              // 检查该输出组是否是 API 模式
+              let outputMode: 'props' | 'custom' | 'api' = 'props';
+              if (sourceNode.outputModes && Array.isArray(sourceNode.outputModes) && sourceNode.outputModes[groupIndex]) {
+                outputMode = sourceNode.outputModes[groupIndex];
+              } else {
+                outputMode = sourceNode.outputMode || (sourceNode.outputDataEnabled ? 'custom' : (sourceNode.apiUseAsOutput ? 'api' : 'props'));
+              }
+              
+              // 如果是 API 模式，确保 API 已经被调用
+              if (outputMode === 'api') {
+                console.log(`[RUN] 源节点 ${sourceId} 输出组 ${groupIndex + 1} 是 API 模式，检查 API 是否已调用`);
+                const apiResult = sourceNode.outputData?.[`apiResult_${groupIndex}`];
+                const globalApiResult = sourceNode.outputData?.apiResult;
+                console.log(`[RUN] 检查 apiResult_${groupIndex}:`, apiResult ? '✅ 已存在' : '❌ 不存在');
+                console.log(`[RUN] 检查全局 apiResult:`, globalApiResult ? '✅ 已存在' : '❌ 不存在');
+                
+                if (!apiResult && !globalApiResult) {
+                  // API 还没有被调用，先调用 API
+                  console.log(`[RUN] ⚠️ 源节点 ${sourceId} (${sourceNode.title || sourceId}) 输出组 ${groupIndex + 1} 需要调用 API，正在调用...`);
+                  await runApiIfNeeded(sourceNode);
+                  // 重新获取节点数据（因为 API 调用后节点数据已更新）
+                  const updatedSourceNode = nodesById.get(sourceId);
+                  if (updatedSourceNode) {
+                    console.log(`[RUN] 更新源节点数据，新的 outputData 键:`, updatedSourceNode.outputData ? Object.keys(updatedSourceNode.outputData) : '无');
+                    Object.assign(sourceNode, updatedSourceNode);
+                  }
+                } else {
+                  console.log(`[RUN] ✅ API 结果已存在，无需再次调用`);
+                }
+              }
+
+              // 根据箭头的 order 获取源节点的输出数据
+              const sourceOutputData = getOutputData(sourceNode, arrowOrder);
+              
+              // 调试日志：输出源节点的数据
+              console.log(`[RUN] 源节点 ${sourceId} (${sourceNode.title || sourceId}) 输出组 ${groupIndex + 1} 的数据:`, sourceOutputData);
+              console.log(`[RUN] 源节点输出数据的所有属性:`, Object.keys(sourceOutputData));
+
+              // 验证数据匹配（使用目标节点的输入组）
+              const validation = validateDataMatch(sourceOutputData, targetNode, sourceNode, arrowOrder);
+              
+              // 调试日志：输出验证结果
+              console.log(`[RUN] 验证结果:`, validation);
 
                 if (validation.match) {
-                  // 验证成功：箭头变绿，传递数据，等待动画完成后再继续
+                // 验证成功：箭头变绿，传递数据
                   await waitForArrowAnimation(arrowId, 'success');
-                  passDataToTarget(sourceOutputData, targetNode);
-                  console.log(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ✅ ${validation.message}`);
-                  queue.push({ nodeId: targetId });
+                passDataToTarget(sourceOutputData, targetNode, arrowOrder);
+                
+                // 记录该箭头已完成
+                completedArrows.add(arrowId);
+                hasProgress = true;
+                
+                // 记录该输入箭头已完成（对于目标节点来说）
+                if (!nodeInputCompleted.has(targetId)) {
+                  nodeInputCompleted.set(targetId, new Set());
+                }
+                nodeInputCompleted.get(targetId)!.add(arrowId);
+
+                // 检查目标节点的输入箭头完成情况
+                const allInputArrows = incomingArrows.get(targetId) || [];
+                
+                // 按 order 排序的输入箭头
+                const sortedInputArrows = [...allInputArrows].sort((a: any, b: any) => {
+                  const ao = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+                  const bo = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+                  return ao - bo;
+                });
+                
+                // 检查已完成的输入箭头数量
+                const completedCount = sortedInputArrows.filter(a => completedArrows.has(a.id)).length;
+                
+                // 如果节点没有输入箭头，或者至少完成了一个输入箭头，节点就可以输出
+                // 这样可以让节点在完成第一个输入箭头后就可以输出，而不需要等待所有输入箭头
+                if (allInputArrows.length === 0 || completedCount > 0) {
+                  // 节点可以输出（没有输入箭头，或者至少完成了一个输入箭头）
+                  if (!nodeReadyForOutput.get(targetId)) {
+                    nodeReadyForOutput.set(targetId, true);
+                    console.log(`[RUN] 节点 ${targetId} (${targetNode.title || targetId}) 现在可以输出了 (已完成输入箭头: ${completedCount}/${allInputArrows.length})`);
+                    
+                    // 运行API获取输出（如果需要）
+                    await runApiIfNeeded(targetNode);
+                  }
                 } else {
-                  // 验证失败：箭头变红，等待动画完成
+                  console.log(`[RUN] 节点 ${targetId} (${targetNode.title || targetId}) 还需要等待输入箭头 (已完成: ${completedCount}/${allInputArrows.length})`);
+                }
+
+                console.log(`[RUN] 箭头 ${arrowId} (order=${arrowOrder}): ${sourceNode.title || sourceId} -> ${targetNode.title || targetId}: ✅ ${validation.message}`);
+              } else {
+                // 验证失败：箭头变红
                   await waitForArrowAnimation(arrowId, 'error');
-                  console.warn(`[RUN] ${currentNode.title || currentNode.id} -> ${targetNode.title || targetId}: ❌ ${validation.message}`, validation.missing);
+                completedArrows.add(arrowId);
+                hasProgress = true;
+                console.warn(`[RUN] 箭头 ${arrowId} (order=${arrowOrder}): ${sourceNode.title || sourceId} -> ${targetNode.title || targetId}: ❌ ${validation.message}`, validation.missing);
                 }
               }
             }
-          }
-          if (starts.length === 0) {
-            console.warn('未找到起点组件');
+
+          if (starts.length === 0 && sortedArrows.length === 0) {
+            console.warn('未找到起点组件或箭头');
           }
         }}
       />
@@ -1932,13 +2411,14 @@ export const Canvas: React.FC = () => {
             position: 'fixed',
             top: 16,
             right: 16,
-            background: 'rgba(17, 24, 39, 0.9)',
+            background: '#0B3042',
             color: '#fff',
-            padding: '8px 12px',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            padding: '10px 14px',
+            borderRadius: 0,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             zIndex: 1000,
-            fontSize: 12,
+            fontSize: '0.85rem',
+            maxWidth: '300px',
           }}
         >
           {toast}

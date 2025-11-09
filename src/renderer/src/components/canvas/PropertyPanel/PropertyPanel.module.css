@@ -2,17 +2,17 @@
   position: fixed;
   top: 72px;
   right: 16px;
-  width: 260px; /* 固定宽度 */
-  background: #fff;
-  border: 1px solid #e6e6e6;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  width: 300px;
+  max-height: calc(100vh - 88px);
+  background: #ffffff;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
-  overflow: visible; /* 内容高度自适应，无滚动条 */
+  overflow: hidden;
   will-change: transform, opacity;
-  /* 避免初次加载闪烁，默认不使用过渡，仅通过关键帧类控制 */
   transition: none;
 }
 
@@ -41,29 +41,31 @@
 }
 
 .propertyHeader {
-  padding: 10px 14px;
-  border-bottom: 1px solid #eee;
+  padding: 16px 16px 12px 16px;
+  border-bottom: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,248,248,0.98));
+  background: #ffffff;
   position: sticky;
   top: 0;
   z-index: 1;
+  flex-shrink: 0;
 }
 
 .headerDeleteButton {
   font-size: 11px;
   padding: 2px 8px;
-  border: 1px solid #e5e7eb;
-  background: #fafafa;
+  border: none;
+  background: transparent;
   color: #666;
   border-radius: 6px;
   cursor: pointer;
+  transition: color 0.2s ease;
 }
 
 .headerDeleteButton:hover {
-  background: #f3f4f6;
+  background: transparent;
   color: #333;
 }
 
@@ -104,9 +106,9 @@
 .propertyPanelTitle {
   margin: 0;
   font-size: 13px;
-  font-weight: 700;
-  color: #111;
-  letter-spacing: 0.2px;
+  font-weight: 600;
+  color: #1f2937;
+  letter-spacing: 0;
 }
 
 .closeButton {
@@ -125,72 +127,178 @@
 
 .propertyContent {
   flex: 1;
-  padding: 8px 12px; /* 更紧凑 */
-  background: #fff;
+  padding: 8px 16px 16px 16px;
+  background: #ffffff;
   max-height: calc(100vh - 120px);
-  overflow-y: auto; /* 纵向滚动条 */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.propertyContent::-webkit-scrollbar {
+  width: 4px;
+}
+
+.propertyContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.propertyContent::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 2px;
+}
+
+.propertyContent::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
 }
 
 .propertySection {
-  margin-bottom: 24px;
-}
-
-.propertyTitle {
-  margin: 0 0 6px 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-}
-
-.propertyTitle::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border-radius: 0 2px 2px 0;
-}
-
-.propertyGroup {
   margin-bottom: 20px;
 }
 
+.propertyTitle {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  letter-spacing: 0;
+}
+
+.propertyTitle::before {
+  display: none;
+}
+
+.propertyGroup {
+  margin-bottom: 16px;
+}
+
+.propertyGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 .propertyGroupTitle {
-  margin: 0 0 6px 0;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  letter-spacing: 0;
+}
+
+.propertySubGroup {
+  margin-bottom: 12px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.propertySubGroup:last-child {
+  margin-bottom: 0;
+}
+
+.propertySubGroupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.propertySubGroupActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.propertySubGroupTitle {
   font-size: 11px;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
+  font-weight: 500;
+  color: #6b7280;
+  letter-spacing: 0;
+}
+
+.propertySelectSmall {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  color: #1f2937;
+  background: #f3f4f6;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%236b7280' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 24px;
+  min-width: 60px;
+}
+
+.propertySelectSmall:focus {
+  outline: none;
+  background-color: #e5e7eb;
+}
+
+.propertySelectSmall:hover {
+  background-color: #e5e7eb;
 }
 
 .propertyList {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-bottom: 6px;
 }
 
 .propertyItem {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 0;
+  gap: 8px;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  transition: none;
 }
 
 .propertyItem:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(59, 130, 246, 0.2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.propertyItemCompact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  transition: none;
+}
+
+.propertyItemCompact:hover {
+  background: transparent;
+  border: none;
 }
 
 .propertyLabel {
-  font-size: 12px;
-  font-weight: 500;
-  color: #555;
-  min-width: 60px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7280;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.propertyLabelCompact {
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7280;
+  min-width: 40px;
   flex-shrink: 0;
 }
 
@@ -220,71 +328,462 @@
 
 .propertyInput {
   flex: 1;
-  padding: 3px 6px;
-  border: 1px solid #e6e6e6;
-  border-radius: 4px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 0;
   font-size: 12px;
-  color: #111;
-  background: #fff;
+  color: #1f2937;
+  background: #f3f4f6;
+  transition: background-color 0.15s ease;
+}
+
+.propertyInput:focus {
+  outline: none;
+  background-color: #e5e7eb;
+}
+
+.propertyInput::placeholder {
+  color: #9ca3af;
+}
+
+.propertyInputCompact {
+  flex: 1;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  color: #1f2937;
+  background: #f3f4f6;
+  transition: background-color 0.15s ease;
+}
+
+.propertyInputCompact:focus {
+  outline: none;
+  background-color: #e5e7eb;
+}
+
+.propertyInputCompact::placeholder {
+  color: #9ca3af;
 }
 
 .iconButton {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.iconButton:hover {
+  background: transparent;
+  border: none;
+  color: #374151;
+  transform: none;
+}
+
+.iconButton:active {
+  transform: none;
+}
+
+.iconButtonSmall {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.iconButtonSmall:hover {
+  background: transparent;
+  color: #374151;
+}
+
+.iconButtonSmall:active {
+  transform: none;
 }
 
 .icon {
   font-size: 14px;
   line-height: 1;
+  color: #6b7280;
 }
 
-.propertyInput:focus {
+.iconButton:hover .icon {
+  color: #374151;
+}
+
+.propertyTextarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  color: #1f2937;
+  background: #f3f4f6;
+  font-family: inherit;
+  resize: vertical;
+  transition: background-color 0.15s ease;
+  line-height: 1.5;
+}
+
+.propertyTextarea:focus {
   outline: none;
-  border-color: #bbb;
+  background-color: #e5e7eb;
 }
 
-/* 去除滚动条：通过不产生滚动（overflow: visible）与紧凑布局实现 */
+.propertyTextarea::placeholder {
+  color: #9ca3af;
+}
+
+.propertyTextareaCompact {
+  width: 100%;
+  min-height: 50px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  color: #1f2937;
+  background: #f3f4f6;
+  font-family: inherit;
+  resize: vertical;
+  transition: background-color 0.15s ease;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.propertyTextareaCompact:focus {
+  outline: none;
+  background-color: #e5e7eb;
+}
+
+.propertyTextareaCompact::placeholder {
+  color: #9ca3af;
+}
+
+.propertyHintCompact {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 10px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.propertyApiConfig {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.propertyLabelCompact {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6b7280;
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.propertyApiActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.propertyButtonSmall {
+  padding: 4px 12px;
+  background: #f3f4f6;
+  color: #1f2937;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.propertyButtonSmall:hover {
+  background: #e5e7eb;
+  transform: none;
+  box-shadow: none;
+}
+
+.propertyButtonSmall:active {
+  transform: none;
+}
+
+.propertySelect {
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  color: #1f2937;
+  background: #f3f4f6;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.propertySelect:focus {
+  outline: none;
+  background-color: #e5e7eb;
+}
+
+.propertySelect:hover {
+  background-color: #e5e7eb;
+}
+
+.propertyHint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* 新增按钮样式 */
+.propertySubGroup > .iconButton,
+.propertyGroup > .iconButton {
+  width: auto;
+  min-width: 80px;
+  height: 28px;
+  padding: 0 12px;
+  background: #f3f4f6;
+  border: none;
+  color: #374151;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 0;
+  transition: background-color 0.15s ease;
+  margin-top: 8px;
+}
+
+.propertySubGroup > .iconButton:hover,
+.propertyGroup > .iconButton:hover {
+  background: #e5e7eb;
+  border: none;
+  color: #1f2937;
+  transform: none;
+}
+
+.propertySubGroup > .iconButton .icon,
+.propertyGroup > .iconButton .icon {
+  margin-right: 4px;
+  font-size: 12px;
+}
 
 /* 暗色主题支持 */
 [data-theme="dark"] .propertyPanel {
-  background: rgba(26, 26, 26, 0.98);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #1f2937;
+  border: none;
 }
 
 [data-theme="dark"] .propertyHeader {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #1f2937;
+  border-bottom: none;
 }
 
 [data-theme="dark"] .propertyContent {
-  background: rgba(15, 15, 15, 0.5);
+  background: #1f2937;
+}
+
+[data-theme="dark"] .propertySubGroup {
+  background: transparent;
+  border: none;
+}
+
+[data-theme="dark"] .propertySubGroupHeader {
+  border-bottom: none;
+}
+
+[data-theme="dark"] .propertySubGroupTitle {
+  color: #9ca3af;
 }
 
 [data-theme="dark"] .propertyItem {
-  background: rgba(40, 40, 40, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border: none;
 }
 
 [data-theme="dark"] .propertyItem:hover {
-  background: rgba(50, 50, 50, 0.9);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: transparent;
+  border: none;
 }
 
 [data-theme="dark"] .propertyInput {
-  background: rgba(40, 40, 40, 0.9);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--color-gray-200);
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
 }
 
 [data-theme="dark"] .propertyInput:focus {
-  background: rgba(50, 50, 50, 1);
-  border-color: #3b82f6;
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertyInputCompact {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertyInputCompact:focus {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertyTextarea {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertyTextarea:focus {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertyTextareaCompact {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertyTextareaCompact:focus {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertySelect {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%9ca3af' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+[data-theme="dark"] .propertySelect:focus {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertySelect:hover {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertySelectSmall {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertySelectSmall:focus {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertySelectSmall:hover {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertyHint {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+}
+
+[data-theme="dark"] .propertyHintCompact {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+}
+
+[data-theme="dark"] .iconButton {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .iconButton:hover {
+  background: transparent;
+  border: none;
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .iconButtonSmall {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .iconButtonSmall:hover {
+  background: transparent;
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .propertySubGroup > .iconButton,
+[data-theme="dark"] .propertyGroup > .iconButton {
+  background: #374151;
+  border: none;
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .propertySubGroup > .iconButton:hover,
+[data-theme="dark"] .propertyGroup > .iconButton:hover {
+  background: #4b5563;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertyButtonSmall {
+  background: #374151;
+  border: none;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .propertyButtonSmall:hover {
+  background: #4b5563;
+}
+
+[data-theme="dark"] .propertyPanelTitle {
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .propertyTitle {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .propertyGroupTitle {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .propertyLabel {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .propertyLabelCompact {
+  color: #9ca3af;
 }

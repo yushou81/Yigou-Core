@@ -20,6 +20,7 @@ export interface ArrowProps {
   onSelect?: (id: string) => void;
   onUpdatePoints?: (id: string, points: number[]) => void;
   className?: string;
+  hasAnyFocusedArrow?: boolean; // 是否有任何箭头处于 focused 状态
 }
 
 export const Arrow: React.FC<ArrowProps> = ({
@@ -30,6 +31,7 @@ export const Arrow: React.FC<ArrowProps> = ({
   onSelect,
   onUpdatePoints,
   className,
+  hasAnyFocusedArrow = false,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isHandleDragging, setIsHandleDragging] = useState<null | 'start' | 'end'>(null);
@@ -230,7 +232,14 @@ export const Arrow: React.FC<ArrowProps> = ({
   // 几何中心与标签颜色
   const centerX = (startPoint.x + endPoint.x) / 2;
   const centerY = (startPoint.y + endPoint.y) / 2;
-  const labelColor = (isSelected || (data as any).focused) ? '#333' : '#aaa';
+  // 箭头虚化：只有当有箭头处于 focused 状态时，非 focused 的箭头才虚化
+  // 如果没有箭头处于 focused 状态，所有箭头都正常显示（黑色实心）
+  const isFocused = (data as any).focused || false;
+  const arrowOpacity = (isSelected || isFocused || !hasAnyFocusedArrow) ? 1 : 0.3;
+  // 描述标签颜色：与箭头虚化逻辑一致
+  // 初始时（没有箭头 focused）或当前箭头是 focused/selected 时，使用深色（正常）
+  // 否则使用浅色（虚化）
+  const labelColor = (isSelected || isFocused || !hasAnyFocusedArrow) ? '#333' : '#aaa';
 
   return (
     <Group
@@ -257,7 +266,7 @@ export const Arrow: React.FC<ArrowProps> = ({
           hitStrokeWidth={0}
           perfectDrawEnabled={false}
           listening={false}
-          opacity={0.3}
+          opacity={0.3 * arrowOpacity}
         />
       )}
       
@@ -274,6 +283,7 @@ export const Arrow: React.FC<ArrowProps> = ({
               lineJoin="round"
               hitStrokeWidth={12}
               listening
+              opacity={arrowOpacity}
             />
           )}
           
@@ -289,6 +299,7 @@ export const Arrow: React.FC<ArrowProps> = ({
               hitStrokeWidth={12}
               perfectDrawEnabled={false}
               listening
+              opacity={arrowOpacity}
             />
           )}
         </>
@@ -303,6 +314,7 @@ export const Arrow: React.FC<ArrowProps> = ({
           hitStrokeWidth={12}
           perfectDrawEnabled={false}
           listening
+          opacity={arrowOpacity}
         />
       )}
 
